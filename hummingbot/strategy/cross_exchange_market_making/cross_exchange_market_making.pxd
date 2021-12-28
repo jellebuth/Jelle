@@ -21,6 +21,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         object _order_amount
         object _cancel_order_threshold
         object _top_depth_tolerance
+        object _top_depth_tolerance_taker
         double _anti_hysteresis_duration
         double _status_report_interval
         double _last_timestamp
@@ -35,6 +36,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         object _taker_to_maker_base_conversion_rate
         object _taker_to_maker_quote_conversion_rate
         object _slippage_buffer
+        object _min_order_amount
         bint _hb_app_notification
         list _maker_order_ids
         double _last_conv_rates_logged

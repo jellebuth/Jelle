@@ -34,7 +34,6 @@ def top_depth_tolerance_prompt() -> str:
     base_asset, quote_asset = maker_market.split("-")
     return f"What is your top depth tolerance? (in {base_asset}) >>> "
 
-
 # strategy specific validators
 def validate_maker_market_trading_pair(value: str) -> Optional[str]:
     maker_market = cross_exchange_market_making_config_map.get("maker_market").value
@@ -124,6 +123,13 @@ cross_exchange_market_making_config_map = {
         type_str="decimal",
         validator=lambda v: validate_decimal(v, min_value=Decimal("0"), inclusive=False),
     ),
+    "min_order_amount": ConfigVar(
+        key="min_order_amount",
+        prompt="What is the minimum order amount required for bid or ask orders?",
+        prompt_on_new=True,
+        type_str="decimal",
+        validator=lambda v: validate_decimal(v, Decimal("0"), inclusive=False),
+    ),
     "adjust_order_enabled": ConfigVar(
         key="adjust_order_enabled",
         prompt="Do you want to enable adjust order? (Yes/No) >>> ",
@@ -161,6 +167,14 @@ cross_exchange_market_making_config_map = {
     "top_depth_tolerance": ConfigVar(
         key="top_depth_tolerance",
         prompt=top_depth_tolerance_prompt,
+        default=0,
+        type_str="decimal",
+        required_if=lambda: False,
+        validator=lambda v: validate_decimal(v, min_value=0, inclusive=True)
+    ),
+    "top_depth_tolerance_taker": ConfigVar(
+        key="top_depth_tolerance_taker",
+        prompt="Percentage to be added to order amount when calculating taker price (e.g 10%)? >>> ",
         default=0,
         type_str="decimal",
         required_if=lambda: False,
