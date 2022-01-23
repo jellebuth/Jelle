@@ -25,6 +25,7 @@ def start(self):
     adjust_order_enabled = xemm_map.get("adjust_order_enabled").value
     top_depth_tolerance = xemm_map.get("top_depth_tolerance").value
     top_depth_tolerance_taker = xemm_map.get("top_depth_tolerance_taker").value
+    top_depth_bias_switch = xemm_map.get("top_depth_bias_switch").value
     order_size_taker_volume_factor = xemm_map.get("order_size_taker_volume_factor").value / Decimal("100")
     order_size_taker_balance_factor = xemm_map.get("order_size_taker_balance_factor").value / Decimal("100")
     order_size_portfolio_ratio_limit = xemm_map.get("order_size_portfolio_ratio_limit").value / Decimal("100")
@@ -34,6 +35,7 @@ def start(self):
     taker_to_maker_quote_conversion_rate = xemm_map.get("taker_to_maker_quote_conversion_rate").value
     slippage_buffer = xemm_map.get("slippage_buffer").value / Decimal("100")
     min_order_amount = xemm_map.get("min_order_amount").value
+    volatility_buffer_size = xemm_map.get("volatility_buffer_size").value
 
 
     # check if top depth tolerance is a list or if trade size override exists
@@ -84,6 +86,7 @@ def start(self):
         adjust_order_enabled=adjust_order_enabled,
         top_depth_tolerance=top_depth_tolerance,
         top_depth_tolerance_taker=top_depth_tolerance_taker,
+        top_depth_bias_switch = top_depth_bias_switch,
         order_size_taker_volume_factor=order_size_taker_volume_factor,
         order_size_taker_balance_factor=order_size_taker_balance_factor,
         order_size_portfolio_ratio_limit=order_size_portfolio_ratio_limit,
@@ -94,4 +97,5 @@ def start(self):
         slippage_buffer=slippage_buffer,
         min_order_amount=min_order_amount,
         hb_app_notification=True,
+        volatility_buffer_size=volatility_buffer_size,
     )

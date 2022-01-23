@@ -34,6 +34,7 @@ def top_depth_tolerance_prompt() -> str:
     base_asset, quote_asset = maker_market.split("-")
     return f"What is your top depth tolerance? (in {base_asset}) >>> "
 
+
 # strategy specific validators
 def validate_maker_market_trading_pair(value: str) -> Optional[str]:
     maker_market = cross_exchange_market_making_config_map.get("maker_market").value
@@ -134,6 +135,14 @@ cross_exchange_market_making_config_map = {
         key="adjust_order_enabled",
         prompt="Do you want to enable adjust order? (Yes/No) >>> ",
         default=True,
+        type_str="bool",
+        validator=validate_bool,
+        required_if=lambda: False,
+    ),
+    "top_depth_bias_switch": ConfigVar(
+        key="top_depth_bias_switch",
+        prompt="When enabled the price set on the maker side shall be equal to the top depth tolerance price when closer to the mid price than the min profitability calc (Yes/No) >>> ",
+        default=False,
         type_str="bool",
         validator=validate_bool,
         required_if=lambda: False,
@@ -248,5 +257,12 @@ cross_exchange_market_making_config_map = {
         default=Decimal("5"),
         type_str="decimal",
         validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=True)
-    )
+    ),
+    "volatility_buffer_size": ConfigVar(
+        key="volatility_buffer_size",
+        prompt="The period in seconds to calulate volatility over: ",
+        type_str="int",
+        default=120,
+        prompt_on_new=True
+    ),
 }
