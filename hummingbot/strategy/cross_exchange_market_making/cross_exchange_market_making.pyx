@@ -281,8 +281,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             # See if there're any open orders.
             if market_pair in tracked_maker_orders and len(tracked_maker_orders[market_pair]) > 0:
                 limit_orders = list(tracked_maker_orders[market_pair].values())
-                bid = market_pair.maker.market.c_get_price(market_pair.maker.trading_pair, False)
-                ask = market_pair.maker.market.c_get_price(market_pair.taker.trading_pair, True)
+                bid, ask = self.c_get_top_bid_ask(market_pair)
                 mid_price = (bid + ask)/2
                 df = LimitOrder.to_pandas(limit_orders, mid_price)
                 df_lines = str(df).split("\n")
