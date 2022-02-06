@@ -381,7 +381,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             for market_pair in self._market_pairs.values():
                 self.c_process_market_pair(market_pair, market_pair_to_active_orders[market_pair])
             # log conversion rates every 5 minutes
-            if self._last_conv_rates_logged + (60. * 5) < self._current_timestamp:
+            if self._last_conv_rates_logged + (60. * 3) < self._current_timestamp:
                 self.log_conversion_rates()
                 self._last_conv_rates_logged = self._current_timestamp
         finally:
