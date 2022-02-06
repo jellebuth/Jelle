@@ -126,7 +126,7 @@ cross_exchange_market_making_config_map = {
     ),
     "min_order_amount": ConfigVar(
         key="min_order_amount",
-        prompt="What is the minimum order amount required for bid or ask orders?",
+        prompt="What is the minimum order amount required for bid or ask orders? >>> ",
         prompt_on_new=True,
         type_str="decimal",
         validator=lambda v: validate_decimal(v, Decimal("0"), inclusive=False),
