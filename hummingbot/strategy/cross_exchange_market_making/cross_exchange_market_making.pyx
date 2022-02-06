@@ -9,7 +9,6 @@ from math import (
     ceil
 )
 from numpy import isnan
-import numpy as np
 import pandas as pd
 from typing import (
     List,
@@ -24,7 +23,6 @@ from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.exchange_base cimport ExchangeBase
 from hummingbot.core.event.events import OrderType
-from hummingbot.strategy.__utils__.trailing_indicators.instant_volatility import InstantVolatilityIndicator
 
 from hummingbot.core.data_type.order_book import OrderBook
 from hummingbot.strategy.strategy_base cimport StrategyBase
@@ -76,7 +74,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     active_order_canceling: bint = True,
                     cancel_order_threshold: Decimal = Decimal("0.05"),
                     top_depth_tolerance: Decimal = Decimal(0),
-                    top_depth_bias_switch: bool = False,
                     top_depth_tolerance_taker: Decimal = Decimal(0),
                     logging_options: int = OPTION_LOG_ALL,
                     status_report_interval: float = 900,
@@ -85,8 +82,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     taker_to_maker_quote_conversion_rate: Decimal = Decimal("1"),
                     slippage_buffer: Decimal = Decimal("0.05"),
                     min_order_amount: Decimal = Decimal,
-                    hb_app_notification: bool = False,
-                    volatility_buffer_size: int = 120
+                    hb_app_notification: bool = False
                     ):
         """
         Initializes a cross exchange market making strategy object.
@@ -125,16 +121,12 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         self._taker_markets = set([market_pair.taker.market for market_pair in market_pairs])
         self._all_markets_ready = False
         self._min_profitability = min_profitability
-        self._volatility_pct = 0
-        self._td_bias_min = (self._min_profitability/2)*100
-        self._volatility_timer = 0
         self._order_size_taker_volume_factor = order_size_taker_volume_factor
         self._order_size_taker_balance_factor = order_size_taker_balance_factor
         self._order_amount = order_amount
         self._order_size_portfolio_ratio_limit = order_size_portfolio_ratio_limit
         self._top_depth_tolerance = top_depth_tolerance
         self._top_depth_tolerance_taker = top_depth_tolerance_taker
-        self._top_depth_bias_switch = top_depth_bias_switch
         self._cancel_order_threshold = cancel_order_threshold
         self._anti_hysteresis_timers = {}
         self._order_fill_buy_events = {}
@@ -155,6 +147,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         self._min_order_amount = min_order_amount
         self._last_conv_rates_logged = 0
         self._hb_app_notification = hb_app_notification
+
         self._maker_order_ids = []
         cdef:
             list all_markets = list(self._maker_markets | self._taker_markets)
@@ -164,7 +157,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
     @property
     def order_amount(self):
         return self._order_amount
-
 
     @property
     def min_profitability(self):
@@ -194,7 +186,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
     @logging_options.setter
     def logging_options(self, int64_t logging_options):
         self._logging_options = logging_options
-
 
     def get_taker_to_maker_conversion_rate(self) -> Tuple[str, Decimal, str, Decimal]:
         """
@@ -317,9 +308,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
     def check_if_still_profitable(self, market_pair: CrossExchangeMarketPair,
                                   LimitOrder active_order,
-                                  current_hedging_price: Decimal,
-                                  topdepth_price: Decimal) -> bool:
-        return self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price,topdepth_price)
+                                  current_hedging_price: Decimal) -> bool:
+        return self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price)
 
     def check_if_sufficient_balance(self, market_pair: CrossExchangeMarketPair,
                                     LimitOrder active_order) -> bool:
@@ -387,7 +377,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         limit_order.client_order_id in self._maker_order_ids:
                     market_pair_to_active_orders[market_pair].append(limit_order)
 
-            # Process each market pair independently and calculate volatility correction.
+            # Process each market pair independently.
             for market_pair in self._market_pairs.values():
                 self.c_process_market_pair(market_pair, market_pair_to_active_orders[market_pair])
             # log conversion rates every 5 minutes
@@ -430,7 +420,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         """
         cdef:
             object current_hedging_price
-            object topdepth_price
             ExchangeBase taker_market
             bint is_buy
             bint has_active_bid = False
@@ -458,10 +447,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 active_order.quantity
             )
 
-            topdepth_price = self.bias_topdepth_price(market_pair,is_buy)
-
             # See if it's still profitable to keep the order on maker market. If not, remove it.
-            if not self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price, topdepth_price):
+            if not self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price):
                 continue
 
             if not self._active_order_canceling:
@@ -494,45 +481,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
         # See if it's profitable to place a limit order on maker market.
         self.c_check_and_create_new_orders(market_pair, has_active_bid, has_active_ask)
-
-
-    cdef object bias_topdepth_price(self,object market_pair,bint is_bid):
-        """
-        If a limit order previously made to the maker side has been filled, hedge it on the taker side.
-        :param order_filled_event: event object
-        """
-        cdef:
-            str trading_pair = market_pair.maker.trading_pair
-            ExchangeBase maker_market = market_pair.maker.market
-        bid = maker_market.c_get_price(market_pair.maker.trading_pair, False)
-        ask = maker_market.c_get_price(market_pair.taker.trading_pair, True)
-        mid_price = (bid + ask)/2
-
-        top_bid_price = maker_market.c_get_price_for_volume(trading_pair,False,self._top_depth_tolerance).result_price
-        #self.notify_hb_app("Top Bid Price" + str(top_bid_price))
-        # Use ask entries in maker order book
-        top_ask_price = maker_market.c_get_price_for_volume(trading_pair,True,self._top_depth_tolerance).result_price
-        #top_bid_price, top_ask_price = self.c_get_top_bid_ask_from_price_samples(market_pair)
-        #self.notify_hb_app("top bid price: " + str(top_bid_price) + " top ask price: " + str(top_ask_price))
-        try:
-            if is_bid:
-                price_quantum_bid = maker_market.c_get_order_price_quantum(market_pair.maker.trading_pair,top_bid_price)
-                price_topdepth = (floor(top_bid_price / price_quantum_bid) - 1) * price_quantum_bid
-                #self.notify_hb_app("price_topdepth bid: " + str(price_topdepth))
-            else:
-                price_quantum_ask = maker_market.c_get_order_price_quantum(market_pair.maker.trading_pair,top_ask_price)
-                price_topdepth = (ceil(top_ask_price / price_quantum_ask) + 1) * price_quantum_ask
-                #self.notify_hb_app("price_topdepth ask: " + str(price_topdepth))
-
-
-            permid = ((max(price_topdepth,mid_price)/min(price_topdepth,mid_price))-1)*100
-        except:
-            return s_decimal_nan
-        #self.notify_hb_app("price_topdepth ask: " + str(permid)+ "self._min_profitability" + str(self._td_bias_min))
-        if permid < self._td_bias_min:
-            return s_decimal_nan
-
-        return price_topdepth
 
     cdef c_did_fill_order(self, object order_filled_event):
         """
@@ -703,7 +651,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         f"{order_price:.8g} {market_pair.maker.quote_asset} is now below the suggested order "
                         f"price at {suggested_price}. Going to cancel the old order and create a new one..."
                     )
-
                 self.c_cancel_order(market_pair, active_order.client_order_id)
                 self.log_with_clock(logging.DEBUG,
                                     f"Current sell order price={order_price}, "
@@ -743,8 +690,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             taker_top = taker_market.c_get_price(taker_trading_pair, False)
             avg_fill_price = (sum([r.price * r.amount for _, r in buy_fill_records]) /
                               sum([r.amount for _, r in buy_fill_records]))
-
-            order_price = taker_market.c_get_price_for_volume(taker_trading_pair, False, quantized_hedge_amount).result_price
+            order_price = taker_market.c_get_price_for_volume(
+                taker_trading_pair, False, quantized_hedge_amount
+            ).result_price
 
             self.log_with_clock(logging.INFO, f"Calculated by HB order_price: {order_price}")
             order_price *= Decimal("1") - self._slippage_buffer
@@ -781,8 +729,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             taker_top = taker_market.c_get_price(taker_trading_pair, True)
             avg_fill_price = (sum([r.price * r.amount for _, r in sell_fill_records]) /
                               sum([r.amount for _, r in sell_fill_records]))
-
-            order_price = taker_market.c_get_price_for_volume(taker_trading_pair, True, quantized_hedge_amount).result_price
+            order_price = taker_market.get_price_for_volume(taker_trading_pair, True,
+                                                            quantized_hedge_amount).result_price
 
             self.log_with_clock(logging.INFO, f"Calculated by HB order_price: {order_price}")
             order_price *= Decimal("1") + self._slippage_buffer
@@ -875,17 +823,16 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         if is_bid:
 
             maker_balance_in_quote = maker_market.c_get_available_balance(market_pair.maker.quote_asset)
+
             taker_balance = taker_market.c_get_available_balance(market_pair.taker.base_asset) * \
                 self._order_size_taker_balance_factor
+
             user_order = self.c_get_adjusted_limit_order_size(market_pair)
+
             try:
                 taker_price = taker_market.c_get_vwap_for_volume(taker_trading_pair, False, user_order*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100)))).result_price
-
             except ZeroDivisionError:
                 assert user_order == s_decimal_zero
-                return s_decimal_zero
-
-            if Decimal.is_nan(taker_price):
                 return s_decimal_zero
 
             maker_balance = maker_balance_in_quote / taker_price
@@ -910,15 +857,11 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 assert user_order == s_decimal_zero
                 return s_decimal_zero
 
-            if Decimal.is_nan(taker_price):
-                return s_decimal_zero
-
             taker_slippage_adjustment_factor = Decimal("1") + self._slippage_buffer
             taker_balance = taker_balance_in_quote / (taker_price * taker_slippage_adjustment_factor)
             order_amount = min(maker_balance, taker_balance, user_order)
 
             return maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, Decimal(order_amount))
-
 
     cdef object c_get_market_making_price(self,
                                           object market_pair,
@@ -966,21 +909,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 taker_price *= self.market_conversion_rate()
 
             # you are buying on the maker market and selling on the taker market
-            maker_price = taker_price / (1 + (self._min_profitability))
+            maker_price = taker_price / (1 + self._min_profitability)
 
             # # If your bid is higher than highest bid price, reduce it to one tick above the top bid price
             if self._adjust_orders_enabled:
                 # If maker bid order book is not empty
                 if not Decimal.is_nan(price_above_bid):
-                    if not self._top_depth_bias_switch:
-                        maker_price = min(maker_price, price_above_bid)
-                    else:
-                        price_above_bid = self.bias_topdepth_price(market_pair,is_bid)
-                        if not Decimal.is_nan(price_above_bid):
-                        #self.notify_hb_app("pab: " + str(price_above_bid))
-                            maker_price = max(maker_price, price_above_bid)
-                        #self.notify_hb_app("pabmax: " + str(maker_price))
-
+                    maker_price = min(maker_price, price_above_bid)
 
             price_quantum = maker_market.c_get_order_price_quantum(
                 market_pair.maker.trading_pair,
@@ -989,7 +924,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             # Rounds down for ensuring profitability
             maker_price = (floor(maker_price / price_quantum)) * price_quantum
-            #self.notify_hb_app("pabmaxround: " + str(maker_price))
+
             return maker_price
         else:
             if not Decimal.is_nan(top_ask_price):
@@ -1009,22 +944,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 taker_price *= self.market_conversion_rate()
 
             # You are selling on the maker market and buying on the taker market
-            maker_price = taker_price * (1 + (self._min_profitability))
+            maker_price = taker_price * (1 + self._min_profitability)
 
             # If your ask is lower than the the top ask, increase it to just one tick below top ask
             if self._adjust_orders_enabled:
                 # If maker ask order book is not empty
                 if not Decimal.is_nan(next_price_below_top_ask):
-                    if not self._top_depth_bias_switch:
-                        maker_price = max(maker_price, next_price_below_top_ask)
-                    else:
-                        next_price_below_top_ask = self.bias_topdepth_price(market_pair,is_bid)
-                        if not Decimal.is_nan(next_price_below_top_ask):
-                        #self.notify_hb_app("paa: " + str(next_price_below_top_ask))
-                            maker_price = min(maker_price, next_price_below_top_ask)
-
-                        #self.notify_hb_app("paamin: " + str(maker_price))
-
+                    maker_price = max(maker_price, next_price_below_top_ask)
 
             price_quantum = maker_market.c_get_order_price_quantum(
                 market_pair.maker.trading_pair,
@@ -1033,7 +959,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             # Rounds up for ensuring profitability
             maker_price = (ceil(maker_price / price_quantum)) * price_quantum
-            #self.notify_hb_app("paaminround: " + str(maker_price))
+
             return maker_price
 
     cdef object c_calculate_effective_hedging_price(self,
@@ -1052,8 +978,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         # Calculate the next price from the top, and the order size limit.
         if is_bid:
             try:
+                #self.notify_hb_app(str(size*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100)))))
                 taker_price = taker_market.c_get_vwap_for_volume(taker_trading_pair, False, size*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100)))).result_price
-                #self.notify_hb_app("Old Price Bid: " + str(taker_price))
             except ZeroDivisionError:
                 return None
 
@@ -1064,8 +990,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             return taker_price
         else:
             try:
+                #self.notify_hb_app(str(size*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100)))))
                 taker_price = taker_market.c_get_vwap_for_volume(taker_trading_pair, True, size*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100)))).result_price
-
             except ZeroDivisionError:
                 return None
 
@@ -1095,18 +1021,23 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         cdef:
             str trading_pair = market_pair.maker.trading_pair
             ExchangeBase maker_market = market_pair.maker.market
-        price_quantum = maker_market.c_get_order_price_quantum(market_pair.maker.trading_pair,maker_market.c_get_price(trading_pair, True))
+
         if self._top_depth_tolerance == 0:
             top_bid_price = maker_market.c_get_price(trading_pair, False)
+
             top_ask_price = maker_market.c_get_price(trading_pair, True)
 
         else:
+            # Use bid entries in maker order book
+            top_bid_price = maker_market.c_get_price_for_volume(trading_pair,
+                                                                False,
+                                                                self._top_depth_tolerance).result_price
 
-            top_bid_price = maker_market.c_get_price_for_volume(trading_pair,False,self._top_depth_tolerance).result_price
-            #self.notify_hb_app("Top Bid Price" + str(top_bid_price))
             # Use ask entries in maker order book
-            top_ask_price = maker_market.c_get_price_for_volume(trading_pair,True,self._top_depth_tolerance).result_price
-            #self.notify_hb_app("Top Ask Price" + str(top_ask_price))
+            top_ask_price = maker_market.c_get_price_for_volume(trading_pair,
+                                                                True,
+                                                                self._top_depth_tolerance).result_price
+
         return top_bid_price, top_ask_price
 
     cdef c_take_suggested_price_sample(self, object market_pair):
@@ -1161,8 +1092,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
     cdef bint c_check_if_still_profitable(self,
                                           object market_pair,
                                           LimitOrder active_order,
-                                          object current_hedging_price,
-                                          object topdepth_price):
+                                          object current_hedging_price):
         """
         Check whether a currently active limit order should be cancelled or not, according to profitability metric.
 
@@ -1176,7 +1106,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         :return: True if the limit order stays, False if the limit order is being cancelled.
         """
         cdef:
-            ExchangeBase maker_market = market_pair.maker.market
             bint is_buy = active_order.is_buy
             str limit_order_type_str = "bid" if is_buy else "ask"
             object order_price = active_order.price
@@ -1186,12 +1115,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             cancel_order_threshold = self._cancel_order_threshold
         else:
             cancel_order_threshold = self._min_profitability
-        #self.notify_hb_app("side: "+ str(is_buy) +" Current hedging price: " + str(current_hedging_price) +" Profitable Price againsts hedging on buy: " + str(order_price * (1 + cancel_order_threshold)) + "Profitable price on order on sell" +str((current_hedging_price * (1 + cancel_order_threshold)))+" Top Depth Price: " + str(topdepth_price) + " Order price: " + str(order_price))
 
-        if not self._top_depth_bias_switch:
-            topdepth_price = s_decimal_nan
-
-        if current_hedging_price is None or topdepth_price is None:
+        if current_hedging_price is None:
             if self._logging_options & self.OPTION_LOG_REMOVING_ORDER:
                 self.log_with_clock(
                     logging.INFO,
@@ -1202,16 +1127,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             self.c_cancel_order(market_pair, active_order.client_order_id)
             return False
 
-        if Decimal.is_nan(topdepth_price):
-            td_var = True
-        else:
-            if (is_buy and order_price > topdepth_price) or (not is_buy and order_price < topdepth_price):
-                td_var = True
-            else:
-                td_var = False
-        #self.notify_hb_app("side: " + str(is_buy) + "buy check: " + str((current_hedging_price < (order_price * (1 + cancel_order_threshold)))) + "sell check: " + str((order_price < (current_hedging_price * (1 + cancel_order_threshold)))) + " tdvar: " + str(td_var))
-        if ((is_buy and (current_hedging_price < (order_price * (1 + cancel_order_threshold))) and td_var) or
-                (not is_buy and (order_price < (current_hedging_price * (1 + cancel_order_threshold))) and td_var)):
+        if ((is_buy and current_hedging_price < order_price * (1 + cancel_order_threshold)) or
+                (not is_buy and order_price < current_hedging_price * (1 + cancel_order_threshold))):
+
             if self._logging_options & self.OPTION_LOG_REMOVING_ORDER:
                 self.log_with_clock(
                     logging.INFO,
@@ -1221,7 +1139,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
             self.c_cancel_order(market_pair, active_order.client_order_id)
             return False
-
         return True
 
     cdef bint c_check_if_sufficient_balance(self, object market_pair, LimitOrder active_order):
@@ -1291,106 +1208,99 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         #     return quote_rate / base_rate
 
     cdef c_check_and_create_new_orders(self, object market_pair, bint has_active_bid, bint has_active_ask):
-        """
-        Check and account for all applicable conditions for creating new limit orders (e.g. profitability, what's the
-        right price given depth tolerance and transient orders on the market, account balances, etc.), and create new
-        limit orders for market making.
+            """
+            Check and account for all applicable conditions for creating new limit orders (e.g. profitability, what's the
+            right price given depth tolerance and transient orders on the market, account balances, etc.), and create new
+            limit orders for market making.
 
-        :param market_pair: cross exchange market pair
-        :param has_active_bid: True if there's already an active bid on the maker side, False otherwise
-        :param has_active_ask: True if there's already an active ask on the maker side, False otherwise
-        """
-        cdef:
-            object effective_hedging_price
-            ExchangeBase maker_market = market_pair.maker.market
+            :param market_pair: cross exchange market pair
+            :param has_active_bid: True if there's already an active bid on the maker side, False otherwise
+            :param has_active_ask: True if there's already an active ask on the maker side, False otherwise
+            """
+            cdef:
+                object effective_hedging_price
 
-        # if there is no active bid, place bid again
-        bid = maker_market.c_get_price(market_pair.taker.trading_pair, False)
-        ask = maker_market.c_get_price(market_pair.taker.trading_pair, True)
-        mid_price = (bid + ask)/2
+            # if there is no active bid, place bid again
+            if not has_active_bid:
+                bid_size = self.c_get_market_making_size(market_pair, True)
 
-        if not has_active_bid:
-            bid_size = self.c_get_market_making_size(market_pair, True)
+                if bid_size > self._min_order_amount:
 
-            if bid_size > self._min_order_amount:
+                    bid_price = self.c_get_market_making_price(market_pair, True, bid_size)
 
-                bid_price = self.c_get_market_making_price(market_pair, True, bid_size)
-
-                if not Decimal.is_nan(bid_price):
-                    effective_hedging_price = self.c_calculate_effective_hedging_price(
-                        market_pair,
-                        True,
-                        bid_size
-                    )
-                    effective_hedging_price_adjusted = effective_hedging_price / self.market_conversion_rate()
-                    if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
-                        self.log_with_clock(
-                            logging.INFO,
-                            f"({market_pair.maker.trading_pair}) Creating limit bid order for "
-                            f"{bid_size} {market_pair.maker.base_asset} at "
-                            f"{bid_price} {market_pair.maker.quote_asset}. "
-                            f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
-                            f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                            f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(bid_price/effective_hedging_price_adjusted))*100})."
-                            f"(Spread from mid market is: {((max(bid_price,mid_price)/min(bid_price,mid_price))-1)*100})."
+                    if not Decimal.is_nan(bid_price):
+                        effective_hedging_price = self.c_calculate_effective_hedging_price(
+                            market_pair,
+                            True,
+                            bid_size
                         )
-                    order_id = self.c_place_order(market_pair, True, True, bid_size, bid_price)
+                        effective_hedging_price_adjusted = effective_hedging_price / self.market_conversion_rate()
+                        if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
+                            self.log_with_clock(
+                                logging.INFO,
+                                f"({market_pair.maker.trading_pair}) Creating limit bid order for "
+                                f"{bid_size} {market_pair.maker.base_asset} at "
+                                f"{bid_price} {market_pair.maker.quote_asset}. "
+                                f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
+                                f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
+                                f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(bid_price/effective_hedging_price_adjusted))*100})."
+                            )
+                        order_id = self.c_place_order(market_pair, True, True, bid_size, bid_price)
+                    else:
+                        if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
+                            self.log_with_clock(
+                                logging.WARNING,
+                                f"({market_pair.maker.trading_pair})"
+                                f"Order book on taker is too thin to place order for size: {bid_size}"
+                                f"Reduce order_size_portfolio_ratio_limit"
+                            )
                 else:
                     if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
                         self.log_with_clock(
                             logging.WARNING,
-                            f"({market_pair.maker.trading_pair})"
-                            f"Order book on taker is too thin to place order for size: {bid_size}"
-                            f"Reduce order_size_portfolio_ratio_limit"
+                            f"({market_pair.maker.trading_pair}) Attempting to place a limit bid but the "
+                            f"bid size is 0. Skipping. Check available balance."
                         )
-            else:
-                if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
-                    self.log_with_clock(
-                        logging.WARNING,
-                        f"({market_pair.maker.trading_pair}) Attempting to place a limit bid but the "
-                        f"bid size is 0. Skipping. Check available balance."
-                    )
-        # if there is no active ask, place ask again
-        if not has_active_ask:
-            ask_size = self.c_get_market_making_size(market_pair, False)
+            # if there is no active ask, place ask again
+            if not has_active_ask:
+                ask_size = self.c_get_market_making_size(market_pair, False)
 
-            if ask_size > self._min_order_amount:
-                ask_price = self.c_get_market_making_price(market_pair, False, ask_size)
 
-                if not Decimal.is_nan(ask_price):
-                    effective_hedging_price = self.c_calculate_effective_hedging_price(
-                        market_pair,
-                        False,
-                        ask_size
-                    )
-                    effective_hedging_price_adjusted = effective_hedging_price / self.market_conversion_rate()
-                    if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
-                        self.log_with_clock(
-                            logging.INFO,
-                            f"({market_pair.maker.trading_pair}) Creating limit ask order for "
-                            f"{ask_size} {market_pair.maker.base_asset} at "
-                            f"{ask_price} {market_pair.maker.quote_asset}. "
-                            f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
-                            f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                            f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(effective_hedging_price_adjusted/ask_price))*100})."
-                            f"(Spread from mid market is: {((max(ask_price,mid_price)/min(ask_price,mid_price))-1)*100})."
+                if ask_size > self._min_order_amount:
+                    ask_price = self.c_get_market_making_price(market_pair, False, ask_size)
+                    if not Decimal.is_nan(ask_price):
+                        effective_hedging_price = self.c_calculate_effective_hedging_price(
+                            market_pair,
+                            False,
+                            ask_size
                         )
-                    order_id = self.c_place_order(market_pair, False, True, ask_size, ask_price)
+                        effective_hedging_price_adjusted = effective_hedging_price / self.market_conversion_rate()
+                        if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
+                            self.log_with_clock(
+                                logging.INFO,
+                                f"({market_pair.maker.trading_pair}) Creating limit ask order for "
+                                f"{ask_size} {market_pair.maker.base_asset} at "
+                                f"{ask_price} {market_pair.maker.quote_asset}. "
+                                f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
+                                f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
+                                f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(effective_hedging_price_adjusted/ask_price))*100})."
+                            )
+                        order_id = self.c_place_order(market_pair, False, True, ask_size, ask_price)
+                    else:
+                        if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
+                            self.log_with_clock(
+                                logging.WARNING,
+                                f"({market_pair.maker.trading_pair})"
+                                f"Order book on taker is too thin to place order for size: {ask_size}"
+                                f"Reduce order_size_portfolio_ratio_limit"
+                            )
                 else:
                     if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
                         self.log_with_clock(
                             logging.WARNING,
-                            f"({market_pair.maker.trading_pair})"
-                            f"Order book on taker is too thin to place order for size: {ask_size}"
-                            f"Reduce order_size_portfolio_ratio_limit"
+                            f"({market_pair.maker.trading_pair}) Attempting to place a limit ask but the "
+                            f"ask size is 0. Skipping. Check available balance."
                         )
-            else:
-                if self._logging_options & self.OPTION_LOG_NULL_ORDER_SIZE:
-                    self.log_with_clock(
-                        logging.WARNING,
-                        f"({market_pair.maker.trading_pair}) Attempting to place a limit ask but the "
-                        f"ask size is 0. Skipping. Check available balance."
-                    )
 
     cdef str c_place_order(self,
                            object market_pair,

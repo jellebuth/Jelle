@@ -139,14 +139,6 @@ cross_exchange_market_making_config_map = {
         validator=validate_bool,
         required_if=lambda: False,
     ),
-    "top_depth_bias_switch": ConfigVar(
-        key="top_depth_bias_switch",
-        prompt="When enabled the price set on the maker side shall be equal to the top depth tolerance price when closer to the mid price than the min profitability calc (Yes/No) >>> ",
-        default=False,
-        type_str="bool",
-        validator=validate_bool,
-        required_if=lambda: False,
-    ),
     "active_order_canceling": ConfigVar(
         key="active_order_canceling",
         prompt="Do you want to enable active order canceling? (Yes/No) >>> ",
@@ -257,12 +249,5 @@ cross_exchange_market_making_config_map = {
         default=Decimal("5"),
         type_str="decimal",
         validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=True)
-    ),
-    "volatility_buffer_size": ConfigVar(
-        key="volatility_buffer_size",
-        prompt="The period in seconds to calulate volatility over: ",
-        type_str="int",
-        default=120,
-        prompt_on_new=True
-    ),
+    )
 }
