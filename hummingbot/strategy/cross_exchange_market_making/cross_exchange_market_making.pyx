@@ -699,7 +699,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 taker_trading_pair, False, quantized_hedge_amount
             ).result_price
             #adjust order price to the correct prices on the taker exchange. Price needs to be adjusted
-            order_price = order_price / self.market_conversion_rate()
+            order_price = order_price
 
             order_price *= Decimal("1") - self._slippage_buffer
             order_price = taker_market.c_quantize_order_price(taker_trading_pair, order_price)
@@ -749,7 +749,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
 
             order_price *= Decimal("1") + self._slippage_buffer
-            order_price = order_price / self.market_conversion_rate()
+            order_price = order_price
             order_price = taker_market.quantize_order_price(taker_trading_pair, order_price)
             self.log_with_clock(logging.INFO, f"Calculated by HB order_price: {order_price} & order_size {quantized_hedge_amount}")
 
@@ -952,7 +952,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             # you are buying on the maker market and selling on the taker market
             maker_price = taker_price / (1 + self._min_profitability)
-            self.log_with_clock(logging.INFO, f"Calculating maker BUY price {maker_price} based on taker_price {taker_price} difference {(maker_price - taker_price) / taker_price} conversion {self.market_conversion_rate()} size used in calculations {size}")
+            self.log_with_clock(logging.INFO, f"Calculating maker BUY price {maker_price} based on taker_price {taker_price} difference {(maker_price - taker_price) / taker_price} conversion {self.market_conversion_rate()} size used in calculations {size} taker unconverted{taker_market.c_get_vwap_for_volume(taker_trading_pair, False, (size*(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100))/base_rate))).result_price}")
 
             # # If your bid is higher than highest bid price, reduce it to one tick above the top bid price
             if self._adjust_orders_enabled:
@@ -993,7 +993,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             # You are selling on the maker market and buying on the taker market
             maker_price = taker_price * (1 + self._min_profitability)
-            self.log_with_clock(logging.INFO, f"Calculating maker SELL price {maker_price} based on taker_price {taker_price} difference {(maker_price - taker_price) / taker_price} conversion {self.market_conversion_rate()} size used in calculations {size}")
+            self.log_with_clock(logging.INFO, f"Calculating maker SELL price {maker_price} based on taker_price {taker_price} difference {(maker_price - taker_price) / taker_price} conversion {self.market_conversion_rate()} size used in calculations {size} taker unconverted: {taker_market.c_get_price_for_quote_volume(taker_trading_pair, True, (size *(Decimal(1)+(self._top_depth_tolerance_taker/Decimal(100))*self.market_conversion_rate()))).result_price}")
 
             # If your ask is lower than the the top ask, increase it to just one tick below top ask
             if self._adjust_orders_enabled:
