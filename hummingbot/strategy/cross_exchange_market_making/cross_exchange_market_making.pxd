@@ -19,6 +19,10 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         object _order_size_taker_balance_factor
         object _order_size_portfolio_ratio_limit
         object _order_amount
+        object _target_base_balance
+        object _slippage_buffer_fix
+        object _waiting_time
+        bint _keep_target_balance
         object _cancel_order_threshold
         object _top_depth_tolerance
         object _top_depth_tolerance_taker
@@ -26,6 +30,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         double _status_report_interval
         double _last_timestamp
         double _limit_order_min_expiration
+        object _counter
         dict _order_fill_buy_events
         dict _order_fill_sell_events
         dict _suggested_price_samples
@@ -81,10 +86,20 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                              object market_pair)
     cdef c_take_suggested_price_sample(self,
                                        object market_pair)
+
+    cdef c_balance_fix_fix(self, market_pair)
+
     cdef c_check_and_create_new_orders(self,
                                        object market_pair,
                                        bint has_active_bid,
                                        bint has_active_ask)
+
+    cdef c_balance_fix_check(self, market_pair)
+
+    cdef c_check_available_balance(self, is_buy: bool, market_pair)
+
+    cdef c_place_fixing_order(self, is_maker: bool, is_buy: bool, market_pair)
+
     cdef str c_place_order(self,
                            object market_pair,
                            bint is_buy,

@@ -34,6 +34,12 @@ def start(self):
     taker_to_maker_quote_conversion_rate = xemm_map.get("taker_to_maker_quote_conversion_rate").value
     slippage_buffer = xemm_map.get("slippage_buffer").value / Decimal("100")
     min_order_amount = xemm_map.get("min_order_amount").value
+    target_base_balance = xemm_map.get("target_base_balance").value
+    slippage_buffer_fix = xemm_map.get("slippage_buffer_fix").value / Decimal("100")
+    waiting_time = xemm_map.get("waiting_time").value
+    keep_target_balance = xemm_map.get("keep_target_balance").value
+    counter = 0
+    taker_to_maker_base_conversion_rate = xemm_map.get("taker_to_maker_base_conversion_rate").value
     # check if top depth tolerance is a list or if trade size override exists
     if isinstance(top_depth_tolerance, list) or "trade_size_override" in xemm_map:
         self._notify("Current config is not compatible with cross exchange market making strategy. Please reconfigure")
@@ -90,6 +96,11 @@ def start(self):
         taker_to_maker_base_conversion_rate=taker_to_maker_base_conversion_rate,
         taker_to_maker_quote_conversion_rate=taker_to_maker_quote_conversion_rate,
         slippage_buffer=slippage_buffer,
+        target_base_balance=target_base_balance,
+        slippage_buffer_fix = slippage_buffer_fix,
+        waiting_time = waiting_time,
+        keep_target_balance = keep_target_balance,
         min_order_amount=min_order_amount,
         hb_app_notification=True,
+        counter = counter
     )

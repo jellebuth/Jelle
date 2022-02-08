@@ -103,6 +103,7 @@ cross_exchange_market_making_config_map = {
         validator=validate_maker_market_trading_pair,
         on_validated=update_oracle_settings
     ),
+
     "taker_market_trading_pair": ConfigVar(
         key="taker_market_trading_pair",
         prompt=taker_trading_pair_prompt,
@@ -181,6 +182,36 @@ cross_exchange_market_making_config_map = {
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, min_value=0, inclusive=True)
     ),
+
+    "keep_target_balance":
+        ConfigVar(key="keep_target_balance",
+                  prompt="Do you want to keep a certain target_balance, next questions are for these settings True/False>>> ",
+                  type_str="bool",
+                  validator=lambda v: validate_bool(v),
+                  prompt_on_new=True,
+                  ),
+
+    "target_base_balance":
+        ConfigVar(key="target_base_balance",
+                  prompt="target_base_balance >>> ",
+                  type_str="decimal",
+                  prompt_on_new=True,
+                  ),
+
+    "slippage_buffer_fix":
+        ConfigVar(key="slippage_buffer_fix",
+                  prompt="slippage_buffer_fix >>> ",
+                  type_str="decimal",
+                  prompt_on_new=True,
+                  ),
+
+    "waiting_time":
+    ConfigVar(key="waiting_time",
+              prompt="waiting_time >>> ",
+              type_str="decimal",
+              prompt_on_new=True,
+              ),
+
     "anti_hysteresis_duration": ConfigVar(
         key="anti_hysteresis_duration",
         prompt="What is the minimum time interval you want limit orders to be adjusted? (in seconds) >>> ",

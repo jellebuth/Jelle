@@ -86,6 +86,14 @@ slippage_buffer: null
 # Min order amount required to place a trade on bid or ask sides
 min_order_amount: null
 
+target_base_balance: null
+
+slippage_buffer_fix: null
+
+waiting_time: null
+
+keep_target_balance: null
+
 
 # For more detailed information, see:
 # https://docs.hummingbot.io/strategies/cross-exchange-market-making/#configuration-parameters

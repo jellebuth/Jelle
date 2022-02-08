@@ -166,6 +166,8 @@ cdef class SimpleTradeStrategy(StrategyBase):
 
         return "\n".join(lines)
 
+
+
     cdef c_did_fill_order(self, object order_filled_event):
         """
         Output log for filled order.
@@ -296,6 +298,15 @@ cdef class SimpleTradeStrategy(StrategyBase):
         finally:
             self._last_timestamp = timestamp
 
+    def _balance_fix_fix(self, market_info):
+          market: ExchangeBase = market_info.market
+          market = market.get_mid_price()
+          self.log_with_clock(
+              logging.INFO,
+              f"({market_info.trading_pair})jelle "
+              f"{market} mid price"
+          )
+
     cdef c_place_orders(self, object market_info):
         """
         Places an order specified by the user input if the user has enough balance
@@ -356,6 +367,7 @@ cdef class SimpleTradeStrategy(StrategyBase):
             object price = market_info.get_price_for_volume(True, self._order_amount).result_price
 
         return quote_asset_balance >= self._order_amount * price if self._is_buy else base_asset_balance >= self._order_amount
+
 
     cdef c_process_market(self, object market_info):
         """
