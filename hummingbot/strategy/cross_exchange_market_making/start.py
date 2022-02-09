@@ -16,6 +16,7 @@ def start(self):
     taker_market = xemm_map.get("taker_market").value.lower()
     raw_maker_trading_pair = xemm_map.get("maker_market_trading_pair").value
     raw_taker_trading_pair = xemm_map.get("taker_market_trading_pair").value
+    triangular_arbitrage_pair = xemm_map.get("triangular_arbitrage_pair").value
     min_profitability = xemm_map.get("min_profitability").value / Decimal("100")
     order_amount = xemm_map.get("order_amount").value
     strategy_report_interval = global_config_map.get("strategy_report_interval").value
@@ -38,7 +39,9 @@ def start(self):
     slippage_buffer_fix = xemm_map.get("slippage_buffer_fix").value / Decimal("100")
     waiting_time = xemm_map.get("waiting_time").value
     keep_target_balance = xemm_map.get("keep_target_balance").value
+    triangular_arbitrage = xemm_map.get("triangular_arbitrage").value
     counter = 0
+    fix_counter = 0
     taker_to_maker_base_conversion_rate = xemm_map.get("taker_to_maker_base_conversion_rate").value
     # check if top depth tolerance is a list or if trade size override exists
     if isinstance(top_depth_tolerance, list) or "trade_size_override" in xemm_map:
@@ -48,8 +51,10 @@ def start(self):
     try:
         maker_trading_pair: str = raw_maker_trading_pair
         taker_trading_pair: str = raw_taker_trading_pair
+        third_trading_pair: str = triangular_arbitrage_pair
         maker_assets: Tuple[str, str] = self._initialize_market_assets(maker_market, [maker_trading_pair])[0]
         taker_assets: Tuple[str, str] = self._initialize_market_assets(taker_market, [taker_trading_pair])[0]
+        third_assets: Tuple[str, str] = self._initialize_market_assets(maker_market, [third_trading_pair])[0]
     except ValueError as e:
         self._notify(str(e))
         return
@@ -57,14 +62,27 @@ def start(self):
     market_names: List[Tuple[str, List[str]]] = [
         (maker_market, [maker_trading_pair]),
         (taker_market, [taker_trading_pair]),
+        (maker_market, [third_trading_pair]),
     ]
 
-    self._initialize_markets(market_names)
+    market_name: List[Tuple[str, List[str]]] = [
+        (maker_market, [maker_trading_pair]),
+        (taker_market, [taker_trading_pair]),
+    ]
+
+    if triangular_arbitrage:
+        self._initialize_markets(market_names)
+    else:
+        self._initialize_markets(market_name)
+
     maker_data = [self.markets[maker_market], maker_trading_pair] + list(maker_assets)
     taker_data = [self.markets[taker_market], taker_trading_pair] + list(taker_assets)
+    third_data = [self.markets[maker_market], third_trading_pair] + list(third_assets)
     maker_market_trading_pair_tuple = MarketTradingPairTuple(*maker_data)
     taker_market_trading_pair_tuple = MarketTradingPairTuple(*taker_data)
-    self.market_trading_pair_tuples = [maker_market_trading_pair_tuple, taker_market_trading_pair_tuple]
+    third_market_trading_pair_tuple = MarketTradingPairTuple(*third_data)
+
+    self.market_trading_pair_tuples = [maker_market_trading_pair_tuple, taker_market_trading_pair_tuple, third_market_trading_pair_tuple]
     self.market_pair = CrossExchangeMarketPair(maker=maker_market_trading_pair_tuple, taker=taker_market_trading_pair_tuple)
 
     strategy_logging_options = (
@@ -78,6 +96,7 @@ def start(self):
     self.strategy = CrossExchangeMarketMakingStrategy()
     self.strategy.init_params(
         market_pairs=[self.market_pair],
+        third_market=third_market_trading_pair_tuple,
         min_profitability=min_profitability,
         status_report_interval=strategy_report_interval,
         logging_options=strategy_logging_options,
@@ -102,5 +121,7 @@ def start(self):
         keep_target_balance = keep_target_balance,
         min_order_amount=min_order_amount,
         hb_app_notification=True,
-        counter = counter
+        counter = counter,
+        triangular_arbitrage = triangular_arbitrage,
+        fix_counter = fix_counter
     )

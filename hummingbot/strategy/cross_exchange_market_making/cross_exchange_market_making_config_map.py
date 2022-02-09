@@ -183,10 +183,27 @@ cross_exchange_market_making_config_map = {
         validator=lambda v: validate_decimal(v, min_value=0, inclusive=True)
     ),
 
+    "triangular_arbitrage":
+    ConfigVar(key="triangular_arbitrage",
+              prompt="Do you want to do triangulair arbitrage if two quote assets are different? True/False >>> ",
+              type_str="bool",
+              default=False,
+              validator=lambda v: validate_bool(v),
+              prompt_on_new=True,
+              ),
+
+    "triangular_arbitrage_pair":
+    ConfigVar(key="triangular_arbitrage_pair",
+              prompt="If triangulair arbitrage is true -> what pair does this need to be on the maker market? e.g. Maker: SHR-BTC,  Taker: SHR-USDT, triangular_arbitrage_pair = BTC-USDT >>> ",
+              default="ETH-USDT",
+              prompt_on_new=True,
+              ),
+
     "keep_target_balance":
         ConfigVar(key="keep_target_balance",
-                  prompt="Do you want to keep a certain target_balance, next questions are for these settings True/False>>> ",
+                  prompt="Do you want to keep a certain target_balance, next questions are for these settings True/False >>> ",
                   type_str="bool",
+                  default=False,
                   validator=lambda v: validate_bool(v),
                   prompt_on_new=True,
                   ),
@@ -195,12 +212,14 @@ cross_exchange_market_making_config_map = {
         ConfigVar(key="target_base_balance",
                   prompt="target_base_balance >>> ",
                   type_str="decimal",
+                  default=None,
                   prompt_on_new=True,
                   ),
 
     "slippage_buffer_fix":
         ConfigVar(key="slippage_buffer_fix",
                   prompt="slippage_buffer_fix >>> ",
+                  default=2,
                   type_str="decimal",
                   prompt_on_new=True,
                   ),
@@ -208,6 +227,7 @@ cross_exchange_market_making_config_map = {
     "waiting_time":
     ConfigVar(key="waiting_time",
               prompt="waiting_time >>> ",
+              default=3,
               type_str="decimal",
               prompt_on_new=True,
               ),
@@ -224,10 +244,10 @@ cross_exchange_market_making_config_map = {
         key="order_size_taker_volume_factor",
         prompt="What percentage of hedge-able volume would you like to be traded on the taker market? "
                "(Enter 1 to indicate 1%) >>> ",
-        default=25,
+        default=Decimal("99.5"),
         type_str="decimal",
         required_if=lambda: False,
-        validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=False)
+        validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=True)
     ),
     "order_size_taker_balance_factor": ConfigVar(
         key="order_size_taker_balance_factor",
