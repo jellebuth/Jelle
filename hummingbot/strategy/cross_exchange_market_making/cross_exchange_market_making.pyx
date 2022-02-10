@@ -507,40 +507,23 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
       if is_buy and is_maker:
           self.logger().info("Going to place a maker buy order to fix balance")
-          order_id = self.c_buy_with_specific_market(
-              market_pair.maker,  # market_trading_pair_tuple
-              order_size_base,  # amount
-              OrderType.LIMIT,    # order_type
-              Decimal(mid_price_taker_buy_price)      # price
-          )
+          self.c_place_order(market_pair, True, True, order_size_base, Decimal(mid_price_taker_buy_price))
+
 
       if is_buy and not is_maker:
           self.logger().info("Going to place a taker buy order to fix balance")
-          order_id = self.buy_with_specific_market(
-              market_pair.taker,  # market_trading_pair_tuple
-              order_size_base,  # amount
-              OrderType.LIMIT,    # order_type
-              Decimal(mid_price_taker_buy_price)    # price
-          )
+          self.c_place_order(market_pair, True, False, order_size_base, Decimal(mid_price_taker_buy_price))
+
 
 
       if not is_buy and is_maker:
           self.logger().info("Going to place a maker sell order to fix balance")
-          order_id = self.sell_with_specific_market(
-              market_pair.maker,  # market_trading_pair_tuple
-              order_size_base,  # amount
-              OrderType.LIMIT,    # order_type
-              Decimal(mid_price_taker_sell_price)          # price
-          )
+          self.c_place_order(market_pair, False, True, order_size_base, Decimal(mid_price_taker_sell_price))
 
       if not is_buy and not is_maker:
           self.logger().info("Going to place a taker sell order to fix balance ")
-          order_id = self.sell_with_specific_market(
-              market_pair.taker,  # market_trading_pair_tuple
-              order_size_base,  # amount
-              OrderType.LIMIT,    # order_type
-              Decimal(mid_price_taker_sell_price)         # price
-          )
+          self.c_place_order(market_pair, False, False, order_size_base, Decimal(mid_price_taker_sell_price))
+
 
     cdef c_cancel_all_maker_limit_orders(self, market_pair):
             market_tuple = market_pair.maker
@@ -613,20 +596,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
                             elif self.c_check_available_balance(is_buy = True, market_pair = market_pair) == "buy_maker_taker":
                                         # buy as much as possible on the taker exchange
-                                        order_id = self.buy_with_specific_market(
-                                            market_pair.taker,  # market_trading_pair_tuple
-                                            Decimal((self._taker_available_balance_quote / self._mid_price_taker_buy_price)),  # amount
-                                            OrderType.LIMIT,    # order_type
-                                            Decimal(self._mid_price_taker_buy_price))  # price
+                                        self.c_place_order(market_pair, True, False, Decimal((self._taker_available_balance_quote / self._mid_price_taker_buy_price)), Decimal(self._mid_price_taker_buy_price))
                                         self.logger().info(f"Place buy order on taker and maker - Taker buy order is placed with most available balance. Available balance quote: {self._taker_available_balance_quote}, Buy price: {self._mid_price_taker_buy_price}, Order size: {Decimal((self._taker_available_balance_quote * self._mid_price_taker_buy_price))}  ")
                                         self._counter = 0
                                         # if there is enough remaining on the maker exchange, also place an order on the maker exchange with the remainging volume
                                         if self._maker_order_size_in_quote - (self._taker_available_balance_quote * self._mid_price_taker_buy_price > self._maker_available_balance_quote * self._mid_price * (Decimal("1"))):
-                                            order_id = self.buy_with_specific_market(
-                                                market_pair.maker,  # market_trading_pair_tuple
-                                                Decimal((taker_order_size_in_quote - (taker_available_balance_quote / mid_price_taker_buy_price))),  # amount, this is left to be placed
-                                                OrderType.LIMIT,    # order_type
-                                                Decimal(mid_price_taker_buy_price))
+                                            self.c_place_order(market_pair, True, True, Decimal((taker_order_size_in_quote - (taker_available_balance_quote / mid_price_taker_buy_price))), Decimal(mid_price_taker_buy_price))
+
                                             self.logger().info(f"Place buy order on taker and maker - The remaining amount of buy order is placed on the maker exchange {Decimal((taker_order_size_in_quote - (taker_available_balance_quote / mid_price_taker_buy_price)))}")
                                             self._counter = 0
                                         else:  # if there is not enough on the maker exchange, just buy whatever you can buy
@@ -663,30 +639,19 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
                                   elif self.c_check_available_balance(is_buy = False, market_pair = market_pair) == "sell_maker_taker":
                                               # place order on the taker exchange with volume available balance
-                                              order_id = self.sell_with_specific_market(
-                                                  market_pair.taker,  # market_trading_pair_tuple
-                                                  taker_available_balance_base,  # amount
-                                                  OrderType.LIMIT,    # order_type
-                                                  mid_price_taker_sell_price)      # price
+                                              self.c_place_order(market_pair, False, False, taker_available_balance_base, mid_price_taker_sell_price)
+
                                               self.logger().info("Place sell order on taker and maker - Taker sell order is placed with most available balance of {taker_available_balance_base} ")
                                               self._counter = 0
 
                                               # if there is enough remaining on the maker exchange, also place an order on the maker exchange with the remainging value
                                               if self._order_size_base - self._taker_available_balance_base > self._maker_available_balance_base:
-                                                  order_id = self.sell_with_specific_market(
-                                                      market_pair.maker,  # market_trading_pair_tuple
-                                                      (order_size_base - taker_available_balance_base),  # amount what is left needs to be placed
-                                                      OrderType.LIMIT,    # order_type
-                                                      mid_price_taker_sell_price)
+                                                  self.c_place_order(market_pair, False, True, (order_size_base - taker_available_balance_base), mid_price_taker_sell_price)
                                                   self.logger().info("Place sell order on taker and maker - The remaining amount of {(order_size_base - taker_available_balance_base)} sell order is placed on the maker exchange")
                                                   self._counter = 0
                                               else:  # sell all availabe balance on the maker
                                                   if maker_available_balance_base > self._min_order_amount:
-                                                      order_id = self.sell_with_specific_market(
-                                                          market_pair.maker,  # market_trading_pair_tuple
-                                                          maker_available_balance_base,  # amount what is left needs to be placed
-                                                          OrderType.LIMIT,    # order_type
-                                                          mid_price_taker_sell_price)
+                                                      self.c_place_order(market_pair, False, True, maker_available_balance_base, mid_price_taker_sell_price)
                                                       self.logger().info("Place sell order on taker and maker- An order with as much maker sell available {maker_available_balance_base} is placed as last option")
                                                       self._counter = 0
                                                   else:
@@ -1635,7 +1600,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                 f"{bid_price} {market_pair.maker.quote_asset}. "
                                 f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
                                 f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                                f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(bid_price/effective_hedging_price))*100})."
+                                f"(Min_profitability is: {(self._min_profitability)*100:.8f} actual is: {(((effective_hedging_price - bid_price)/bid_price) * 100)} (Taker - Maker / Taker))."
                             )
                         order_id = self.c_place_order(market_pair, True, True, bid_size, bid_price)
                     else:
@@ -1675,7 +1640,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                 f"{ask_price} {market_pair.maker.quote_asset}. "
                                 f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
                                 f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                                f"(Current profitability is: {(self._min_profitability)*100:.8f} actual is: {(1-(effective_hedging_price/ask_price))*100})."
+                                f"(Min_profitability is: {(self._min_profitability)*100:.8f} actual is: {(((bid_price - effective_hedging_price)/bid_price) * 100)} (Maker - Taker / Taker))."
                             )
                         order_id = self.c_place_order(market_pair, False, True, ask_size, ask_price)
                     else:
