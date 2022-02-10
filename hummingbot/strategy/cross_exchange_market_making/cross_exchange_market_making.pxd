@@ -97,6 +97,11 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                        bint has_active_bid,
                                        bint has_active_ask)
 
+    cdef c_cancel_all_maker_limit_orders(self, market_pair)
+
+    cdef c_cancel_all_taker_limit_orders(self, market_pair)
+
+
     cdef c_balance_fix_check(self, market_pair)
 
     cdef c_check_available_balance(self, is_buy: bool, market_pair)
