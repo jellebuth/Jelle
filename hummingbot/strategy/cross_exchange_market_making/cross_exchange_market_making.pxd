@@ -111,6 +111,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
     cdef str c_place_order(self,
                            object market_pair,
                            bint is_buy,
-                           bint is_maker,
+                           market,
+                           bint record_maker,
                            object amount,
                            object price)
