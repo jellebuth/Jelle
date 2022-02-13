@@ -965,9 +965,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
         if buy_fill_quantity > 0:
             hedged_order_quantity = min(
-                buy_fill_quantity,
-                taker_market.c_get_available_balance(market_pair.taker.base_asset) *
-                self._order_size_taker_balance_factor
+                (buy_fill_quantity / base_rate),
+                ((taker_market.c_get_available_balance(market_pair.taker.base_asset) * \
+                                    self._order_size_taker_balance_factor))
             )
             hedged_order_quantity = hedged_order_quantity
             quantized_hedge_amount = taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))
@@ -979,6 +979,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             order_price = taker_market.c_get_price_for_volume(
                 taker_trading_pair, False, quantized_hedge_amount
             ).result_price
+
             #adjust order price to the correct prices on the taker exchange. Price needs to be adjusted
             order_price = order_price
 
@@ -988,6 +989,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, False, market_pair.taker, False, quantized_hedge_amount, order_price)
+                self.notify_hb_app_with_timestamp(
+                    f"If taker order is filled at order price, the minimum profitability would be:{((avg_fill_price - (order_price / base_rate * quote_rate)) / avg_fill_price) * 100}. Avg maker fill price: {avg_fill_price}. Order price: {(order_price / base_rate * quote_rate)}"
+                )
 
                 #add the third leg of a triangular arbitrage order in this case you need to buy back the asset
                 if (market_pair.maker.quote_asset != market_pair.taker.quote_asset) and self._triangular_arbitrage: #add another argument which looks at if the parameter for the thirs leg is active
@@ -1016,18 +1020,20 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
         if sell_fill_quantity > 0:
             hedged_order_quantity = min(
-                sell_fill_quantity,
+                (sell_fill_quantity / base_rate), #only convert base rate
                 taker_market.c_get_available_balance(market_pair.taker.quote_asset) /
-                market_pair.taker.get_price_for_volume(True, sell_fill_quantity).result_price *
+                (taker_market.c_get_price_for_quote_volume(taker_trading_pair, True, ((sell_fill_quantity / base_rate))).result_price * (Decimal("1") + self._slippage_buffer))  *
                 self._order_size_taker_volume_factor
             )
+
+
             hedged_order_quantity = hedged_order_quantity
             quantized_hedge_amount = taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))
             taker_top = taker_market.c_get_price(taker_trading_pair, True)
             avg_fill_price = (sum([r.price * r.amount for _, r in sell_fill_records]) /
                               sum([r.amount for _, r in sell_fill_records]))
-            order_price = taker_market.get_price_for_volume(taker_trading_pair, True,
-                                                            quantized_hedge_amount).result_price
+            #changed to reflect conversions
+            order_price = taker_market.c_get_price_for_quote_volume(taker_trading_pair, True, quantized_hedge_amount).result_price
 
 
             order_price *= Decimal("1") + self._slippage_buffer
@@ -1037,6 +1043,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
+                self.notify_hb_app_with_timestamp(
+                    f"If taker order is filled at order price, the minimum profitability would be:{((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100}. Avg maker fill price: {avg_fill_price}. Order price: {(order_price / base_rate * quote_rate)}"
+                )
                 #add the third leg of a triangular arbitrage order
                 if (market_pair.maker.quote_asset != market_pair.taker.quote_asset) and self._triangular_arbitrage: #add another argument which looks at if the parameter for the thirs leg is active
                      # this is the amount in maker base base_currency
