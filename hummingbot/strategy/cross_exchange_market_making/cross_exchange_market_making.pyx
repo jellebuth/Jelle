@@ -880,7 +880,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     f"({order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} has been completely filled."
                 )
                 self.notify_hb_app_with_timestamp(
-                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted ({limit_order_record.price * self.market_conversion_rate()}) sis filled."
+                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted ({limit_order_record.price * self.market_conversion_rate()}) is filled."
                 )
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
