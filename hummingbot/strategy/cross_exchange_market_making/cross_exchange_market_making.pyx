@@ -449,9 +449,11 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
       if order_size_base > self._min_order_amount:
           self._counter = self._counter + 1
+          return True
 
       else:
           self._counter = 0
+          return False
 
 
     cdef c_check_available_balance(self, is_buy: bool, market_pair):
@@ -615,11 +617,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                             # available balance with a buy order on maker side
                             if self.c_check_available_balance(is_buy = True, market_pair = market_pair) == "buy_maker":
                                 self.c_place_fixing_order(is_maker = True, is_buy = True, market_pair = market_pair)  # place maker buy order
+                                self._counter = 0
 
 
                             # available balance with a buy order on taker side
                             elif self.c_check_available_balance(is_buy = True, market_pair = market_pair) == "buy_taker":
                                  self.c_place_fixing_order(is_maker = False, is_buy = True, market_pair = market_pair)  # place taker buy order
+
 
 
 
@@ -640,17 +644,16 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
                                                       else:
                                                           pass
+                            self._counter = 0
 
-                            else:  # what if there is not enough balance, add an argument that will buy
-                                          self.logger().info("All availablity arguments were passed for a buy order, should place max buy and max sell")
-                                          # cancel all orders for pair
-                                          # place new order
+
 
                         if pref_base_min_actual < 0 and order_size_base > self._min_order_amount:  # after checking again if there is a difference in balance
                                   self.logger().info(f"Timer passes {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Base Balance: {maker_available_balance_base + taker_available_balance_base}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
                                   # available balance with a sell order on taker side
                                   if self.c_check_available_balance(is_buy = False, market_pair = market_pair) == "sell_taker":
                                       self.c_place_fixing_order(is_maker = False, is_buy = False, market_pair = market_pair)  # place taker sell order
+
 
 
 
@@ -661,10 +664,10 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
 
 
+
                                   elif self.c_check_available_balance(is_buy = False, market_pair = market_pair) == "sell_maker_taker":
                                               # place order on the taker exchange with volume available balance
                                               self.c_place_order(market_pair, False, market_pair.taker, False,  min(taker_available_balance_base, order_size_base), mid_price_taker_sell_price)
-
                                               self.logger().info("Place sell order on taker and maker - Taker sell order is placed with most available balance or at max size of the order to restore balance {min(taker_available_balance_base, order_size_base)} ")
 
 
@@ -680,10 +683,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
                                                   else:
                                                       pass
+                                  self._counter = 0
 
-                                  else:
-                                        # just place the available balance on the maker and taker to get as close as pooible
-                                        self.logger().info("all check availability arguments were passes for a sell order")
 
                         return True
                          #return true, so if there was a mistake, ship the normal proces untill it does not return true
@@ -788,7 +789,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             return
 
         #if there is a difference in balance wait for it to be restored before doing something else
-        if self._keep_target_balance and self.c_balance_fix_fix(market_pair) and not market_pair.maker.quote_asset != market_pair.taker.quote_asset:
+        if self._keep_target_balance and self.c_balance_fix_check(market_pair) and self.c_balance_fix_fix(market_pair) and not market_pair.maker.quote_asset != market_pair.taker.quote_asset:
           return
 
         # See if it's profitable to place a limit order on maker market. But only if the fix_fix is False
@@ -868,7 +869,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
                 self.notify_hb_app_with_timestamp(
                     f"Maker BUY order ({limit_order_record.quantity} {limit_order_record.base_currency} @ "
-                    f"{limit_order_record.price} {limit_order_record.quote_currency}), Rate adjusted: ({limit_order_record.price * self.market_conversion_rate}) is filled."
+                    f"{limit_order_record.price} {limit_order_record.quote_currency})}) is filled."
                 )
             else:
                 limit_order_record = self._sb_order_tracker.c_get_limit_order(market_pair.taker, order_id)
@@ -879,7 +880,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     f"({order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} has been completely filled."
                 )
                 self.notify_hb_app_with_timestamp(
-                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted ({limit_order_record.price * self.market_conversion_rate})is filled."
+                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} is filled."
                 )
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
@@ -902,7 +903,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
                 self.notify_hb_app_with_timestamp(
                     f"Maker sell order ({limit_order_record.quantity} {limit_order_record.base_currency} @ "
-                    f"{limit_order_record.price} {limit_order_record.quote_currency}), Rate adjusted: ({limit_order_record.price * self.market_conversion_rate}) is filled."
+                    f"{limit_order_record.price} {limit_order_record.quote_currency}) is filled."
                 )
             else:
                 limit_order_record = self._sb_order_tracker.c_get_limit_order(market_pair.taker, order_id)
@@ -913,7 +914,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     f"({order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} has been completely filled."
                 )
                 self.notify_hb_app_with_timestamp(
-                    f"Taker sell order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted:({limit_order_record.price * self.market_conversion_rate}) is filled."
+                    f"Taker sell order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} is filled."
                 )
 
     cdef bint c_check_if_price_has_drifted(self, object market_pair, LimitOrder active_order):
