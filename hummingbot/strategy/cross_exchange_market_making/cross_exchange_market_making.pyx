@@ -255,6 +255,17 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             ])
         return pd.DataFrame(data=data, columns=columns)
 
+
+
+    def fix_counter_status_df(self):
+          columns = ["Value"]
+          data = []
+
+          data.extend([self._fix_counter])
+
+          return pd.DataFrame(data=data, columns=columns)
+
+
     def format_status(self) -> str:
         cdef:
             list lines = []
@@ -279,6 +290,11 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                          ["    " + line for line in str(markets_df).split("\n")])
 
             oracle_df = self.oracle_status_df()
+
+            fix_counter_df = self.fix_counter_status_df()
+            lines.extend(["", "  Balance fix counter:"] +
+                         ["    " + line for line in str(fix_counter_df).split("\n")])
+
             if not oracle_df.empty:
                 lines.extend(["", "  Rate conversion:"] +
                              ["    " + line for line in str(oracle_df).split("\n")])
@@ -656,7 +672,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                               if order_size_base - min(taker_available_balance_base, order_size_base) > maker_available_balance_base:
                                                   self.c_place_order(market_pair, False, market_pair.maker, False, (order_size_base - min(taker_available_balance_base, order_size_base)), mid_price_maker_sell_price)
                                                   self.logger().info("Place sell order on taker and maker - The remaining amount of {min(taker_available_balance_base, order_size_base)} sell order is placed on the maker exchange")
-                                                  self._counter = 0
+
                                               else:  # sell all availabe balance on the maker
                                                   if maker_available_balance_base > self._min_order_amount:
                                                       self.c_place_order(market_pair, False, market_pair.maker, False, min(maker_available_balance_base, order_size_base), mid_price_maker_sell_price)
