@@ -40,6 +40,8 @@ def start(self):
     waiting_time = xemm_map.get("waiting_time").value
     keep_target_balance = xemm_map.get("keep_target_balance").value
     triangular_arbitrage = xemm_map.get("triangular_arbitrage").value
+    cancel_order_timer = xemm_map.get("cancel_order_timer").value
+    cancel_order_timer_seconds = xemm_map.get("cancel_order_timer_seconds").value
     counter = 0
     fix_counter = 0
     taker_to_maker_base_conversion_rate = xemm_map.get("taker_to_maker_base_conversion_rate").value
@@ -122,6 +124,8 @@ def start(self):
         min_order_amount=min_order_amount,
         hb_app_notification=True,
         counter = counter,
+        cancel_order_timer = cancel_order_timer,
+        cancel_order_timer_seconds = cancel_order_timer_seconds,
         triangular_arbitrage = triangular_arbitrage,
         fix_counter = fix_counter
     )

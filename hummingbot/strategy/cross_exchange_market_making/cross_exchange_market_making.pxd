@@ -32,8 +32,11 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         double _anti_hysteresis_duration
         double _status_report_interval
         double _last_timestamp
+        object _cancel_timer
         double _limit_order_min_expiration
         object _counter
+        bint _cancel_order_timer
+        object _cancel_order_timer_seconds
         dict _order_fill_buy_events
         dict _order_fill_sell_events
         dict _suggested_price_samples

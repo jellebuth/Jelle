@@ -88,6 +88,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     slippage_buffer_fix: Decimal = 3,
                     waiting_time: Decimal = Decimal("1"),
                     keep_target_balance: bool = False,
+                    cancel_order_timer: bool = True,
+                    cancel_order_timer_seconds: float = 1800,
                     counter: Decimal = 0,
                     fix_counter: Decimal = 0,
                     ):
@@ -144,6 +146,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         self._anti_hysteresis_duration = anti_hysteresis_duration
         self._logging_options = <int64_t>logging_options
         self._last_timestamp = 0
+        self._cancel_timer = 0
         self._counter = counter
         self._limit_order_min_expiration = limit_order_min_expiration
         self._status_report_interval = status_report_interval
@@ -162,6 +165,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         self._triangular_arbitrage = triangular_arbitrage
         self._keep_target_balance = keep_target_balance
         self._fix_counter = fix_counter
+        self._cancel_order_timer = cancel_order_timer
+        self._cancel_order_timer_seconds = cancel_order_timer_seconds
         self._maker_order_ids = []
         all_markets = list(self._maker_markets | self._taker_markets)
 
@@ -333,6 +338,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
     cdef c_start(self, Clock clock, double timestamp):
         StrategyBase.c_start(self, clock, timestamp)
         self._last_timestamp = timestamp
+        self._cancel_timer = self._current_timestamp + self._cancel_order_timer_seconds
 
     cdef c_tick(self, double timestamp):
         """
@@ -745,10 +751,17 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     need_adjust_order = True
                     continue
 
+
         # If order adjustment is needed in the next tick, set the anti-hysteresis timer s.t. the next order adjustment
         # for the same pair wouldn't happen within the time limit.
         if need_adjust_order:
             self._anti_hysteresis_timers[market_pair] = self._current_timestamp + self._anti_hysteresis_duration
+
+        if self._cancel_order_timer and self._current_timestamp > self._cancel_timer:
+            self._cancel_timer = self._current_timestamp + self._cancel_order_timer_seconds
+            self.c_cancel_all_maker_limit_orders(market_pair)
+            self.logger().info("Just canceled all maker orders to prevent the bot from being stuck")
+
 
         # If there's both an active bid and ask, then there's no need to think about making new limit orders.
         if has_active_bid and has_active_ask:

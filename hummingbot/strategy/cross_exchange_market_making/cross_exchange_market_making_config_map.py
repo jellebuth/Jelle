@@ -166,6 +166,22 @@ cross_exchange_market_making_config_map = {
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, min_value=0, inclusive=False)
     ),
+
+
+    "cancel_order_timer": ConfigVar(
+        key="cancel_order_timer",
+        prompt="Do you want to cancel your orders every x seconds as a safety? >>> ",
+        default= True,
+        type_str="bool",
+    ),
+
+    "cancel_order_timer_seconds": ConfigVar(
+        key="cancel_order_timer_seconds",
+        prompt="Cancel all orders once every x seconds >>> ",
+        default= 1800,
+        type_str="float",
+    ),
+
     "top_depth_tolerance": ConfigVar(
         key="top_depth_tolerance",
         prompt=top_depth_tolerance_prompt,
