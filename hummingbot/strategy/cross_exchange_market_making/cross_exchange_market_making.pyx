@@ -869,7 +869,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
                 self.notify_hb_app_with_timestamp(
                     f"Maker BUY order ({limit_order_record.quantity} {limit_order_record.base_currency} @ "
-                    f"{limit_order_record.price} {limit_order_record.quote_currency}), Rate adjusted: ({limit_order_record.price * self.market_conversion_rate()}) is filled."
+                    f"{limit_order_record.price} {limit_order_record.quote_currency}) RA:{limit_order_record.price * self.market_conversion_rate()} is filled."
                 )
             else:
                 limit_order_record = self._sb_order_tracker.c_get_limit_order(market_pair.taker, order_id)
@@ -880,7 +880,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     f"({order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} has been completely filled."
                 )
                 self.notify_hb_app_with_timestamp(
-                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted ({limit_order_record.price * self.market_conversion_rate()}) is filled."
+                    f"Taker buy order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} RA: {limit_order_record.price * self.market_conversion_rate()} is filled."
                 )
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
@@ -903,7 +903,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
                 self.notify_hb_app_with_timestamp(
                     f"Maker sell order ({limit_order_record.quantity} {limit_order_record.base_currency} @ "
-                    f"{limit_order_record.price} {limit_order_record.quote_currency}), Rate adjusted: ({limit_order_record.price * self.market_conversion_rate}) is filled."
+                    f"{limit_order_record.price} {limit_order_record.quote_currency}) RA:{limit_order_record.price * self.market_conversion_rate} is filled."
                 )
             else:
                 limit_order_record = self._sb_order_tracker.c_get_limit_order(market_pair.taker, order_id)
@@ -914,7 +914,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     f"({order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} has been completely filled."
                 )
                 self.notify_hb_app_with_timestamp(
-                    f"Taker sell order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency}, Rate adjusted:({limit_order_record.price * self.market_conversion_rate()}) is filled."
+                    f"Taker sell order {order_completed_event.base_asset_amount} {order_completed_event.base_asset} @ {price_lor} {limit_order_record.quote_currency} RA:{limit_order_record.price * self.market_conversion_rate()} is filled."
                 )
 
     cdef bint c_check_if_price_has_drifted(self, object market_pair, LimitOrder active_order):
@@ -1020,7 +1020,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, False, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"If taker order is filled at order price, the minimum profitability would be:{((avg_fill_price - (order_price / base_rate * quote_rate)) / avg_fill_price) * 100}. Avg maker fill price: {avg_fill_price}. Order price: {(order_price / base_rate * quote_rate)}"
+                    f"Minimum profitability trade: {(((order_price / base_rate * quote_rate) - avg_fill_price) / avg_fill_price) * 100} Maker: {avg_fill_price} Taker: {(order_price / base_rate * quote_rate)}"
                 )
 
                 #add the third leg of a triangular arbitrage order in this case you need to buy back the asset
@@ -1074,7 +1074,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"If taker order is filled at order price, the minimum profitability would be:{((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100}. Avg maker fill price: {avg_fill_price}. Order price: {(order_price / base_rate * quote_rate)}"
+                    f"Minimum profitability trade:{((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100} Maker: {avg_fill_price} Taker:{(order_price / base_rate * quote_rate)}"
                 )
                 #add the third leg of a triangular arbitrage order
                 if (market_pair.maker.quote_asset != market_pair.taker.quote_asset) and self._triangular_arbitrage: #add another argument which looks at if the parameter for the thirs leg is active
