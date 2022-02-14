@@ -771,7 +771,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
 
         #if there is a difference in balance wait for it to be restored before doing something else
-        if self._keep_target_balance and self.c_balance_fix_check(market_pair) and self.c_balance_fix_fix(market_pair) and not market_pair.maker.quote_asset != market_pair.taker.quote_asset:
+        if self._keep_target_balance and self.c_balance_fix_check(market_pair) and self.c_balance_fix_fix(market_pair) and not self._use_oracle_conversion_rate:
           return
 
         # If order adjustment is needed in the next tick, set the anti-hysteresis timer s.t. the next order adjustment
