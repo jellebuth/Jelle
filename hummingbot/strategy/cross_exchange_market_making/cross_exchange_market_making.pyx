@@ -443,12 +443,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
       cdef:
         ExchangeBase maker_market = market_pair.maker.market
         ExchangeBase taker_market = market_pair.taker.market
-        object total_base_balance = taker_market.c_get_balance(market_pair.maker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
+        object total_base_balance = taker_market.c_get_balance(market_pair.taker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
         object pref_base_min_actual = Decimal(self._target_base_balance - total_base_balance)
         object order_size_base = abs(pref_base_min_actual)
 
       if order_size_base > self._min_order_amount:
           self._counter = self._counter + 1
+          self.logger().info(f"Total Balance: {total_base_balance} pref_min_acutal {pref_base_min_actual} order size base: {order_size_base}")
           return True
 
       else:
@@ -473,7 +474,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
           object taker_available_balance_base = taker_market.c_get_available_balance(market_pair.taker.base_asset)
           object maker_available_balance_quote = maker_market.c_get_available_balance(market_pair.maker.quote_asset)
           object taker_available_balance_quote = taker_market.c_get_available_balance(market_pair.taker.quote_asset)
-          object total_base_balance = taker_market.c_get_balance(market_pair.maker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
+          object total_base_balance = taker_market.c_get_balance(market_pair.taker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
           object pref_base_min_actual = Decimal(self._target_base_balance - total_base_balance)
           object order_size_base = abs(pref_base_min_actual)
           object maker_order_size_in_quote = (order_size_base * mid_price_taker_buy_price)
@@ -529,7 +530,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
           object mid_price_maker_buy_price = mid_price_maker * (Decimal("1") + self._slippage_buffer_fix)
           object mid_price_taker_sell_price = mid_price_taker * (Decimal("1") - self._slippage_buffer_fix)
           object mid_price_maker_sell_price = mid_price_maker * (Decimal("1") - self._slippage_buffer_fix)
-          object total_base_balance = taker_market.c_get_balance(market_pair.maker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
+          object total_base_balance = taker_market.c_get_balance(market_pair.taker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
           object pref_base_min_actual = Decimal(self._target_base_balance - total_base_balance)
           object order_size_base = abs(pref_base_min_actual)
 
@@ -585,7 +586,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
               object mid_price_maker_buy_price = mid_price_maker * (Decimal("1") + self._slippage_buffer_fix)
               object mid_price_taker_sell_price = mid_price_taker * (Decimal("1") - self._slippage_buffer_fix)
               object mid_price_maker_sell_price = mid_price_maker * (Decimal("1") - self._slippage_buffer_fix)
-              object total_base_balance = taker_market.c_get_balance(market_pair.maker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
+              object total_base_balance = taker_market.c_get_balance(market_pair.taker.base_asset) + maker_market.c_get_balance(market_pair.maker.base_asset)
               object pref_base_min_actual = Decimal(self._target_base_balance - total_base_balance)
               object maker_available_balance_base = maker_market.c_get_available_balance(market_pair.maker.base_asset)
               object taker_available_balance_base = taker_market.c_get_available_balance(market_pair.taker.base_asset)
@@ -614,7 +615,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         if pref_base_min_actual > 0 and order_size_base > self._min_order_amount:
                             # second time checking if there is a difference, if there is, place buy order
                             # here you would want to cancell all orders on the exchanges
-                            self.logger().info(f"Timer passes {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Base Balance: {maker_available_balance_base + taker_available_balance_base}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
+                            self.logger().info(f"Timer passed {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Total Base Balance: {total_base_balance}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
                             # available balance with a buy order on maker side
                             if self.c_check_available_balance(is_buy = True, market_pair = market_pair) == "buy_maker":
                                 self.c_place_fixing_order(is_maker = True, is_buy = True, market_pair = market_pair)  # place maker buy order
@@ -654,7 +655,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
 
                         if pref_base_min_actual < 0 and order_size_base > self._min_order_amount:  # after checking again if there is a difference in balance
-                                  self.logger().info(f"Timer passes {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Base Balance: {maker_available_balance_base + taker_available_balance_base}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
+                                  self.logger().info(f"Timer passed {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Total Base Balance: {total_base_balance}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
                                   # available balance with a sell order on taker side
                                   if self.c_check_available_balance(is_buy = False, market_pair = market_pair) == "sell_taker":
                                       self.c_place_fixing_order(is_maker = False, is_buy = False, market_pair = market_pair)  # place taker sell order
