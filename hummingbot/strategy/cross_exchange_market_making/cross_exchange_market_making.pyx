@@ -66,7 +66,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     min_profitability: Decimal,
                     order_amount: Optional[Decimal] = Decimal("0.0"),
                     order_size_taker_volume_factor: Decimal = Decimal("1"),
-                    order_size_taker_balance_factor: Decimal = Decimal("0.995"),
+                    order_size_taker_balance_factor: Decimal = Decimal("0.925"),
                     order_size_portfolio_ratio_limit: Decimal = Decimal("0.1667"),
                     limit_order_min_expiration: float = 130.0,
                     adjust_order_enabled: bool = True,

@@ -228,7 +228,7 @@ cross_exchange_market_making_config_map = {
         ConfigVar(key="target_base_balance",
                   prompt="target_base_balance >>> ",
                   type_str="decimal",
-                  default=None,
+                  default=1,
                   prompt_on_new=True,
                   ),
 
@@ -269,7 +269,7 @@ cross_exchange_market_making_config_map = {
         key="order_size_taker_balance_factor",
         prompt="What percentage of asset balance would you like to use for hedging trades on the taker market? "
                "(Enter 1 to indicate 1%) >>> ",
-        default=Decimal("99.5"),
+        default=Decimal("92.5"),
         type_str="decimal",
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=False)
