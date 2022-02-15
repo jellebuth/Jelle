@@ -615,7 +615,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         if pref_base_min_actual > 0 and order_size_base > self._min_order_amount:
                             # second time checking if there is a difference, if there is, place buy order
                             # here you would want to cancell all orders on the exchanges
-                            self.logger().info(f"Timer passed {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Total Base Balance: {total_base_balance}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
+                            self.logger().info(f"Timer passed {self._waiting_time} seconds, current value of Timer: {self._counter} Order_size base: {order_size_base} Base Balance: {total_base_balance}, Target Balance: {self._target_base_balance}, Diff: {pref_base_min_actual}")
                             # available balance with a buy order on maker side
                             if self.c_check_available_balance(is_buy = True, market_pair = market_pair) == "buy_maker":
                                 self.c_place_fixing_order(is_maker = True, is_buy = True, market_pair = market_pair)  # place maker buy order
