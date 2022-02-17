@@ -1197,7 +1197,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                 self._order_size_taker_balance_factor) * base_rate) #check why it is done twice
 
             #maker balance in quote: taker price is taker asset, so needs to be converted back. But it should actually be the FRONT-USDT price therefore we take a margin of error of 2%
-            maker_balance = ((maker_balance_in_quote / ((taker_price * taker_slippage_adjustment_factor) * quote_rate / base_rate)))
+            maker_balance = (maker_balance_in_quote / (((((taker_price * taker_slippage_adjustment_factor) * quote_rate / base_rate))) / (1 + self._min_profitability)))
             order_amount = min(maker_balance, taker_balance, user_order)
 
             if order_amount > self._min_order_amount:
