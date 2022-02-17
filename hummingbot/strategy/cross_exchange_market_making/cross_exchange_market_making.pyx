@@ -1031,7 +1031,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, False, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"Minimum profitability maker buy trade: {round(((((order_price / base_rate * quote_rate) - avg_fill_price) / avg_fill_price) * 100),3)}"
+                    f"Min profitability maker buy trade: {round(((((order_price / base_rate * quote_rate) - avg_fill_price) / avg_fill_price) * 100),3)}, MP: {avg_fill_price}"
                 )
 
                 #add the third leg of a triangular arbitrage order in this case you need to buy back the asset
@@ -1084,7 +1084,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"Minimum profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}"
+                    f"Min profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}, MP: {avg_fill_price}"
                 )
 
                 #add the third leg of a triangular arbitrage order
