@@ -756,7 +756,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             current_hedging_price = self.c_calculate_effective_hedging_price(
                 market_pair,
                 is_buy,
-                active_order.quantity
+                active_order.quantity)
 
             # See if it's still profitable to keep the order on maker market. If not, remove it.
             if not self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price):
