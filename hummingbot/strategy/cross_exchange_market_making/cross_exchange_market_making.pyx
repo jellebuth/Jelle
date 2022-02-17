@@ -483,15 +483,15 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
       if is_buy:
           #  check balance to check weather you can buy the asset
           if (taker_available_balance_quote/mid_price_taker_buy_price) > order_size_base:  # check if availabale balance is enough
-              self.logger().info(f"Taker enough quote balance {(taker_available_balance_quote/mid_price_taker_buy_price)} to buy {order_size_base}, will place a taker buy order")
+              self.logger().info(f"Taker enough quote balance {taker_available_balance_quote / mid_price_taker_buy_price} to buy {order_size_base}, will place a taker buy order")
               return "buy_taker"
           elif (maker_available_balance_quote / mid_price_maker_buy_price) > order_size_base :  # check if availabale balance is enough
-              self.logger().info(f"Maker enough quote balance {(maker_available_balance_quote / mid_price_maker_buy_price)} to buy {order_size_base}, will place a maker buy order")
+              self.logger().info(f"Maker enough quote balance {maker_available_balance_quote / mid_price_maker_buy_price} to buy {order_size_base}, will place a maker buy order")
               return "buy_maker"  # not enough balance to buy
           else:
               if (taker_available_balance_quote/mid_price_taker_buy_price) + (maker_available_balance_quote / mid_price_maker_buy_price)  > order_size_base:
                   return "buy_maker_taker"
-                  self.logger().info(f"Enough quote balane on both exchanges only Taker: {(taker_available_balance_quote/mid_price_taker_buy_price)}, Maker: {(maker_available_balance_quote / mid_price_maker_buy_price)}, Total: {(taker_available_balance_quote/mid_price_taker_buy_price) + (maker_available_balance_quote / mid_price_maker_buy_price)}, to buy {order_size_base}, will place maker and taker buy")
+                  self.logger().info(f"Enough quote balane on both exchanges only Taker: {(taker_available_balance_quote/mid_price_taker_buy_price)}, Maker: {maker_available_balance_quote / mid_price_maker_buy_price}, Total: {taker_available_balance_quote/mid_price_taker_buy_price + (maker_available_balance_quote / mid_price_maker_buy_price)}, to buy {order_size_base}, will place maker and taker buy")
               else:
                   self.logger().info(f"Not enough quote balance to buy Order size: {order_size_base}. Maker Quote balance: {maker_available_balance_quote}, Taker Quote balance:{taker_available_balance_quote} Order size in quote: {maker_order_size_in_quote}")
               return False
@@ -757,7 +757,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 market_pair,
                 is_buy,
                 active_order.quantity
-            )
 
             # See if it's still profitable to keep the order on maker market. If not, remove it.
             if not self.c_check_if_still_profitable(market_pair, active_order, current_hedging_price):
@@ -1085,7 +1084,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"Minimum profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}"                                                              
+                    f"Minimum profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}"
                 )
 
                 #add the third leg of a triangular arbitrage order
