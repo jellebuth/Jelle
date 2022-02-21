@@ -25,6 +25,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         object _waiting_time
         object _fix_counter
         bint _keep_target_balance
+        bint _filled_order_delay
+        object _filled_order_delay_seconds
+        object _filled_order_delay_timer
         object _cancel_order_threshold
         object _triangular_arbitrage
         object _top_depth_tolerance
