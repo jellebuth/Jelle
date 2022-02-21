@@ -1100,7 +1100,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             if quantized_hedge_amount > s_decimal_zero:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
-                    f"Min profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}, MP: {avg_fill_price}"
+                    f"Min profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}, MP: {avg_fill_price}, MPA: {(avg_fill_price / self.market_conversion_rate())}"
                 )
 
                 #add the third leg of a triangular arbitrage order
