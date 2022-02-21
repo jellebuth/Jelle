@@ -102,6 +102,10 @@ cancel_order_timer: null
 
 cancel_order_timer_seconds: null
 
+filled_order_delay: null
+
+filled_order_delay_seconds: null
+
 
 # For more detailed information, see:
 # https://docs.hummingbot.io/strategies/cross-exchange-market-making/#configuration-parameters

@@ -30,6 +30,8 @@ def start(self):
     order_size_taker_balance_factor = xemm_map.get("order_size_taker_balance_factor").value / Decimal("100")
     order_size_portfolio_ratio_limit = xemm_map.get("order_size_portfolio_ratio_limit").value / Decimal("100")
     anti_hysteresis_duration = xemm_map.get("anti_hysteresis_duration").value
+    filled_order_delay = xemm_map.get("filled_order_delay").value
+    filled_order_delay_seconds = xemm_map.get("filled_order_delay_seconds").value
     use_oracle_conversion_rate = xemm_map.get("use_oracle_conversion_rate").value
     taker_to_maker_base_conversion_rate = xemm_map.get("taker_to_maker_base_conversion_rate").value
     taker_to_maker_quote_conversion_rate = xemm_map.get("taker_to_maker_quote_conversion_rate").value
@@ -113,6 +115,8 @@ def start(self):
         order_size_taker_balance_factor=order_size_taker_balance_factor,
         order_size_portfolio_ratio_limit=order_size_portfolio_ratio_limit,
         anti_hysteresis_duration=anti_hysteresis_duration,
+        filled_order_delay=filled_order_delay,
+        filled_order_delay_seconds=filled_order_delay_seconds,
         use_oracle_conversion_rate=use_oracle_conversion_rate,
         taker_to_maker_base_conversion_rate=taker_to_maker_base_conversion_rate,
         taker_to_maker_quote_conversion_rate=taker_to_maker_quote_conversion_rate,

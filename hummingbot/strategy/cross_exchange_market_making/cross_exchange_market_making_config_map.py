@@ -256,6 +256,24 @@ cross_exchange_market_making_config_map = {
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, min_value=0, inclusive=False)
     ),
+
+    "filled_order_delay": ConfigVar(
+        key="filled_order_delay",
+        prompt="Do you want to wait x amount of seconds after an order is filled to place new orders >>> ",
+        type_str="bool",
+        prompt_on_new=True,
+        default=True
+    ),
+
+
+    "filled_order_delay_seconds": ConfigVar(
+        key="filled_order_delay_seconds",
+        prompt="How long do you want to wait before placing the next order if your order gets filled (in seconds)? >>> ",
+        default=60,
+        type_str="float",
+        prompt_on_new=True
+    ),
+
     "order_size_taker_volume_factor": ConfigVar(
         key="order_size_taker_volume_factor",
         prompt="What percentage of hedge-able volume would you like to be traded on the taker market? "

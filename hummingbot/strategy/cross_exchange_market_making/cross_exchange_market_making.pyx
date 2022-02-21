@@ -71,6 +71,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     limit_order_min_expiration: float = 130.0,
                     adjust_order_enabled: bool = True,
                     anti_hysteresis_duration: float = 60.0,
+                    filled_order_delay: bool = True,
+                    filled_order_delay_seconds: float = 60.0,
                     active_order_canceling: bint = True,
                     triangular_arbitrage: bool = False,
                     cancel_order_threshold: Decimal = Decimal("0.05"),
@@ -144,6 +146,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         self._suggested_price_samples = {}
         self._active_order_canceling = active_order_canceling
         self._anti_hysteresis_duration = anti_hysteresis_duration
+        self._filled_order_delay = filled_order_delay
+        self._filled_order_delay_seconds = filled_order_delay_seconds
+        self._filled_order_delay_timer = 0
         self._logging_options = <int64_t>logging_options
         self._last_timestamp = 0
         self._cancel_timer = 0
@@ -798,10 +803,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         if has_active_bid and has_active_ask:
             return
 
+        #if an order is filled, do not place orders for x amount of time
+        if self._filled_order_delay and self._current_timestamp < self._filled_order_delay_timer:
+          return
+
         # If there are pending taker orders, wait for them to complete. Function is not available for different quote pairs, so exclude that
         if self.has_active_taker_order(market_pair):
             return
-
 
         # See if it's profitable to place a limit order on maker market. But only if the fix_fix is False
 
@@ -839,6 +847,10 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         f"({market_pair.maker.trading_pair}) Maker buy order of "
                         f"{order_filled_event.amount} {market_pair.maker.base_asset} filled."
                     )
+                if self._filled_order_delay:
+                  self._filled_order_delay_timer = self._current_timestamp + self._filled_order_delay_seconds
+                  self.c_cancel_all_maker_limit_orders
+                  self.logger().info(f"Just canceled all maker order and will not place any new orders for {self._cancel_order_timer_seconds} seconds")
 
             else:
                 if market_pair not in self._order_fill_sell_events:
@@ -852,6 +864,10 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                         f"({market_pair.maker.trading_pair}) Maker sell order of "
                         f"{order_filled_event.amount} {market_pair.maker.base_asset} filled."
                     )
+                if self._filled_order_delay:
+                  self._filled_order_delay_timer = self._current_timestamp + self._filled_order_delay_seconds
+                  self.c_cancel_all_maker_limit_orders
+                  self.logger().info(f"Just canceled all maker order and will not place any new orders for {self._cancel_order_timer_seconds} seconds")
 
             # Call c_check_and_hedge_orders() to emit the orders on the taker side.
             try:
@@ -1603,7 +1619,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
             order_amount = min(taker_balance, user_order)
 
-            quantized_size_limit = maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, Decimal(order_amount))
+            quantized_size_limit = maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, order_amount)
 
 
         else: #active order is a sell, check if there is enough buy balance on taker
@@ -1623,7 +1639,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             taker_slippage_adjustment_factor = Decimal("1") + self._slippage_buffer
             taker_balance = (((taker_balance_in_quote / (taker_price * taker_slippage_adjustment_factor))) * base_rate)
             order_amount = min(taker_balance, user_order)
-            quantized_size_limit = maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, Decimal(order_amount))
+            quantized_size_limit = maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, order_amount)
 
         if active_order.quantity > quantized_size_limit:
             if self._logging_options & self.OPTION_LOG_ADJUST_ORDER:
