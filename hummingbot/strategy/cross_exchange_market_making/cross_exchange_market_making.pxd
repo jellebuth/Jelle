@@ -19,6 +19,8 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         object _order_size_taker_volume_factor
         object _order_size_taker_balance_factor
         object _order_size_portfolio_ratio_limit
+        object _order_size_maker_balance_factor
+        object _triangular_switch
         object _order_amount
         object _target_base_balance
         object _slippage_buffer_fix

@@ -215,6 +215,16 @@ cross_exchange_market_making_config_map = {
               prompt_on_new=True,
               ),
 
+    "triangular_switch":
+    ConfigVar(key="triangular_switch",
+              prompt="True if maker has a quote asset like BTC or ETH, False if maker quote asset is USDT (when triangular_arbitrage is enabled ) >>> ",
+              type_str="bool",
+              default="True",
+              validator=lambda v: validate_bool(v),
+              prompt_on_new=True,
+              ),
+
+
     "keep_target_balance":
         ConfigVar(key="keep_target_balance",
                   prompt="Do you want to keep a certain target_balance, next questions are for these settings True/False >>> ",
@@ -278,16 +288,28 @@ cross_exchange_market_making_config_map = {
         key="order_size_taker_volume_factor",
         prompt="What percentage of hedge-able volume would you like to be traded on the taker market? "
                "(Enter 1 to indicate 1%) >>> ",
-        default=Decimal("99.5"),
+        default=Decimal("95.0"),
         type_str="decimal",
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=True)
     ),
+
+    "order_size_maker_balance_factor": ConfigVar(
+        key="order_size_maker_balance_factor",
+        prompt="What percentage of asset balance would you like to use for determine the order size for the maker exchange? "
+               "(Enter 1 to indicate 1%) >>> ",
+        default=Decimal("95.0"),
+        type_str="decimal",
+        required_if=lambda: False,
+        validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=False)
+    ),
+
+
     "order_size_taker_balance_factor": ConfigVar(
         key="order_size_taker_balance_factor",
         prompt="What percentage of asset balance would you like to use for hedging trades on the taker market? "
                "(Enter 1 to indicate 1%) >>> ",
-        default=Decimal("92.5"),
+        default=Decimal("95.0"),
         type_str="decimal",
         required_if=lambda: False,
         validator=lambda v: validate_decimal(v, Decimal(0), Decimal(100), inclusive=False)

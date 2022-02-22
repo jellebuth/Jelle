@@ -29,6 +29,7 @@ def start(self):
     order_size_taker_volume_factor = xemm_map.get("order_size_taker_volume_factor").value / Decimal("100")
     order_size_taker_balance_factor = xemm_map.get("order_size_taker_balance_factor").value / Decimal("100")
     order_size_portfolio_ratio_limit = xemm_map.get("order_size_portfolio_ratio_limit").value / Decimal("100")
+    order_size_maker_balance_factor = xemm_map.get("order_size_maker_balance_factor").value / Decimal("100")
     anti_hysteresis_duration = xemm_map.get("anti_hysteresis_duration").value
     filled_order_delay = xemm_map.get("filled_order_delay").value
     filled_order_delay_seconds = xemm_map.get("filled_order_delay_seconds").value
@@ -42,6 +43,7 @@ def start(self):
     waiting_time = xemm_map.get("waiting_time").value
     keep_target_balance = xemm_map.get("keep_target_balance").value
     triangular_arbitrage = xemm_map.get("triangular_arbitrage").value
+    triangular_switch = xemm_map.get("triangular_switch").value
     cancel_order_timer = xemm_map.get("cancel_order_timer").value
     cancel_order_timer_seconds = xemm_map.get("cancel_order_timer_seconds").value
     counter = 0
@@ -58,7 +60,10 @@ def start(self):
         third_trading_pair: str = triangular_arbitrage_pair
         maker_assets: Tuple[str, str] = self._initialize_market_assets(maker_market, [maker_trading_pair])[0]
         taker_assets: Tuple[str, str] = self._initialize_market_assets(taker_market, [taker_trading_pair])[0]
-        third_assets: Tuple[str, str] = self._initialize_market_assets(maker_market, [third_trading_pair])[0]
+        if triangular_switch:
+            third_assets: Tuple[str, str] = self._initialize_market_assets(maker_market, [third_trading_pair])[0]
+        else:
+            third_assets: Tuple[str, str] = self._initialize_market_assets(taker_market, [third_trading_pair])[0]
     except ValueError as e:
         self._notify(str(e))
         return
@@ -114,6 +119,7 @@ def start(self):
         order_size_taker_volume_factor=order_size_taker_volume_factor,
         order_size_taker_balance_factor=order_size_taker_balance_factor,
         order_size_portfolio_ratio_limit=order_size_portfolio_ratio_limit,
+        order_size_maker_balance_factor=order_size_maker_balance_factor,
         anti_hysteresis_duration=anti_hysteresis_duration,
         filled_order_delay=filled_order_delay,
         filled_order_delay_seconds=filled_order_delay_seconds,
@@ -131,5 +137,6 @@ def start(self):
         cancel_order_timer = cancel_order_timer,
         cancel_order_timer_seconds = cancel_order_timer_seconds,
         triangular_arbitrage = triangular_arbitrage,
+        triangular_switch = triangular_switch,
         fix_counter = fix_counter
     )

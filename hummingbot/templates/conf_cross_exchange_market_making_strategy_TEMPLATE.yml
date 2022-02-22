@@ -106,6 +106,10 @@ filled_order_delay: null
 
 filled_order_delay_seconds: null
 
+order_size_maker_balance_factor: null
+
+triangular_switch: null
+
 
 # For more detailed information, see:
 # https://docs.hummingbot.io/strategies/cross-exchange-market-making/#configuration-parameters
