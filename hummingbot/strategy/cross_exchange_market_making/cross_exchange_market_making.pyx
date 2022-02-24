@@ -1028,6 +1028,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             hedged_order_quantity = min(
                 (buy_fill_quantity / base_rate),
                 (taker_market.c_get_available_balance(market_pair.taker.base_asset)))
+
             hedged_order_quantity = hedged_order_quantity
             quantized_hedge_amount = taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))
             #fix amount so it reflexts the correct amount. ONly fix the different base assets, not different quote assets as amount to buy or sell then needs to be the same
@@ -1058,7 +1059,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                      if self._triangular_switch:
                        self.c_place_order(market_pair, True, self._third_market, False, (avg_fill_price * hedged_order_quantity), (self._third_market.get_mid_price() * (1 + self._slippage_buffer_fix)))
                      if not self._triangular_switch:
-                       self.c_place_order(market_pair, True, self._third_market, False, ((avg_fill_price * hedged_order_quantity) / quote_rate), (self._third_market.get_mid_price() * (1 + self._slippage_buffer_fix)))
+                       self.c_place_order(market_pair, False, self._third_market, False, ((avg_fill_price * hedged_order_quantity) / quote_rate), (self._third_market.get_mid_price() / (1 + self._slippage_buffer_fix)))
 
                 del self._order_fill_buy_events[market_pair]
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_HEDGED:
@@ -1081,8 +1082,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         if sell_fill_quantity > 0:
             hedged_order_quantity = min(
                 (sell_fill_quantity / base_rate), #only convert base rate
-                taker_market.c_get_available_balance(market_pair.taker.quote_asset) /
-                (taker_market.c_get_price_for_quote_volume(taker_trading_pair, True, ((sell_fill_quantity / base_rate))).result_price * (Decimal("1") + self._slippage_buffer)))
+                taker_market.c_get_available_balance(market_pair.taker.quote_asset) * self._order_size_taker_balance_factor / (self.c_calculate_effective_hedging_price(market_pair, False, sell_fill_quantity) * (Decimal("1") + self._slippage_buffer)) * quote_rate)
 
 
             hedged_order_quantity = hedged_order_quantity
@@ -1660,7 +1660,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                     logging.INFO,
                     f"({market_pair.maker.trading_pair}) Order size limit ({quantized_size_limit}) "
                     f"is now less than the current active order amount ({active_order.quantity:.8g}). "
-                    f"Going to adjust the order."
+                    f"Going to adjust the order. Taker_balance calculation {taker_balance}, taker balance in quote: {taker_balance_in_quote}, user order: {user_order}, effective hedging price {(self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability))} ."
                 )
             self.c_cancel_order(market_pair, active_order.client_order_id)
             return False
