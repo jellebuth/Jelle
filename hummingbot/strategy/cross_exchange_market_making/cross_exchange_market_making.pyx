@@ -934,7 +934,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 )
                 self.notify_hb_app_with_timestamp(
                     f"Maker sell order ({limit_order_record.quantity} {limit_order_record.base_currency} @ "
-                    f"{limit_order_record.price} RA:{limit_order_record.price * self.market_conversion_rate} is filled."
+                    f"{limit_order_record.price} is filled."
                 )
             else:
                 limit_order_record = self._sb_order_tracker.c_get_limit_order(market_pair.taker, order_id)
@@ -1048,6 +1048,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             self.log_with_clock(logging.INFO, f"Slippage buffer adjusted order_price: {order_price}hedge order quantity {hedged_order_quantity},  & order_size qunatized hedge amount {quantized_hedge_amount}, quantized amount before converting{taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))}")
 
             if quantized_hedge_amount > s_decimal_zero:
+              #the price for quote volume does not work with a BTC or  ETH denominated taker market
+              if not self._triangular_switch and self._triangular_arbitrage:
+                self.c_place_order(market_pair, False, market_pair.taker, False, quantized_hedge_amount, ((self.c_calculate_effective_hedging_price(market_pair, True, quantized_hedge_amount) / (Decimal("1") + self._slippage_buffer_fix)) * quote_rate))
+                self.notify_hb_app_with_timestamp(
+                    f"Min profitability maker buy trade: {round(((((order_price / base_rate * quote_rate) - avg_fill_price) / avg_fill_price) * 100),3)}, MP: {avg_fill_price}, Slippage_buffer: {self._slippage_buffer_fix}"
+                )
+              else:
                 self.c_place_order(market_pair, False, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
                     f"Min profitability maker buy trade: {round(((((order_price / base_rate * quote_rate) - avg_fill_price) / avg_fill_price) * 100),3)}, MP: {avg_fill_price}"
@@ -1082,7 +1089,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
         if sell_fill_quantity > 0:
             hedged_order_quantity = min(
                 (sell_fill_quantity / base_rate), #only convert base rate
-                taker_market.c_get_available_balance(market_pair.taker.quote_asset) * self._order_size_taker_balance_factor / (self.c_calculate_effective_hedging_price(market_pair, False, sell_fill_quantity) * (Decimal("1") + self._slippage_buffer)) * quote_rate)
+                ((taker_market.c_get_available_balance(market_pair.taker.quote_asset) * self._order_size_taker_balance_factor) / ((self.c_calculate_effective_hedging_price(market_pair, False, sell_fill_quantity) * (Decimal("1") + self._slippage_buffer)) * quote_rate)))
 
 
             hedged_order_quantity = hedged_order_quantity
@@ -1097,13 +1104,21 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             order_price *= Decimal("1") + self._slippage_buffer
             order_price = order_price
             order_price = taker_market.quantize_order_price(taker_trading_pair, order_price)
-            self.log_with_clock(logging.INFO, f"Slippage buffer adjusted order_price: {order_price}hedge order quantity {hedged_order_quantity},  & order_size qunatized hedge amount {quantized_hedge_amount}, quantized amount before converting{taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))}")
+            self.log_with_clock(logging.INFO, f"Slippage buffer adjusted order_price: {order_price} hedge order quantity {quantized_hedge_amount},  & order_size qunatized hedge amount {quantized_hedge_amount}, quantized amount before converting{taker_market.c_quantize_order_amount(taker_trading_pair, Decimal(hedged_order_quantity))}")
 
             if quantized_hedge_amount > s_decimal_zero:
+              #the price for quote volume does not work with a BTC or  ETH denominated taker market
+              if not self._triangular_switch and self._triangular_arbitrage:
+                self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, ((self.c_calculate_effective_hedging_price(market_pair, False, quantized_hedge_amount) * (Decimal("1") + self._slippage_buffer_fix)) * quote_rate))
+                self.notify_hb_app_with_timestamp(
+                    f"Min profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}, MP: {avg_fill_price}, MPA: {(avg_fill_price / self.market_conversion_rate())} slipage buffer {self._slippage_buffer_fix}"
+                )
+              else:
                 self.c_place_order(market_pair, True, market_pair.taker, False, quantized_hedge_amount, order_price)
                 self.notify_hb_app_with_timestamp(
                     f"Min profitability maker sell trade:{round((((avg_fill_price - (order_price / base_rate * quote_rate)) / (order_price / base_rate * quote_rate)) * 100),3)}, MP: {avg_fill_price}, MPA: {(avg_fill_price / self.market_conversion_rate())}"
                 )
+
 
                 #add the third leg of a triangular arbitrage order
                 if (market_pair.maker.quote_asset != market_pair.taker.quote_asset) and self._triangular_arbitrage: #add another argument which looks at if the parameter for the thirs leg is active
@@ -1208,7 +1223,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             #had to be converted to base rate for taker_price calculations
 
             try: #this one does not use price for quote volume but vwap
-                taker_price = (self.c_calculate_effective_hedging_price(market_pair, True, user_order) / (1 + self._min_profitability))
+                taker_price = (self.c_calculate_effective_hedging_price(market_pair, True, user_order))
             except ZeroDivisionError:
                 assert user_order == s_decimal_zero
                 return s_decimal_zero
@@ -1230,7 +1245,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
               self.log_with_clock(
                 logging.INFO,
                 f"Determining max size of the Maker bid order: Max size based on maker balance: ({maker_balance}), Max size based on taker balance:({taker_balance}), Max size of the order: ({user_order}) "
-                f"Taking into account a Base_rate of ({base_rate}) & a Quote rate of {quote_rate}) and a Taker_price of ({taker_price})"
+                f"Taking into account a Base_rate of ({base_rate}) & a Quote rate of {quote_rate}) and a Taker_price of ({taker_price}) Price for quote volume {taker_market.c_get_price_for_quote_volume(taker_trading_pair, False, order_amount).result_price}"
                 )
 
             return maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, Decimal(order_amount))
@@ -1246,14 +1261,14 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
             user_order = self.c_get_adjusted_limit_order_size(market_pair)
 
             try:
-                taker_price = (self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability) * quote_rate)
+                taker_price = (self.c_calculate_effective_hedging_price(market_pair, False, user_order))
             except ZeroDivisionError:
                 assert user_order == s_decimal_zero
                 return s_decimal_zero
 
             maker_balance = maker_balance
             taker_slippage_adjustment_factor = Decimal("1") + self._slippage_buffer
-            taker_balance = ((taker_balance_in_quote / (self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability))) * quote_rate)
+            taker_balance = ((taker_balance_in_quote / (self.c_calculate_effective_hedging_price(market_pair, False, user_order))) * quote_rate)
 
             order_amount = min(maker_balance, taker_balance, user_order)
 
@@ -1263,7 +1278,7 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
               self.log_with_clock(
                 logging.INFO,
                 f"Determining max size of the Maker ask order: Max size based on maker balance: ({maker_balance}), Max size based on taker balance:({taker_balance}), Max size of the order: ({user_order}) "
-                f"Taking into account a Base_rate of ({base_rate}) & a Quote rate of ({quote_rate}) and a Taker_price of ({taker_price})"
+                f"Taking into account a Base_rate of ({base_rate}) & a Quote rate of ({quote_rate}) and a Taker_price of ({taker_price}) price for quote volume {taker_market.c_get_price_for_quote_volume(taker_trading_pair, True, order_amount).result_price}"
                 )
 
 
@@ -1636,10 +1651,6 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
 
 
         else: #active order is a sell, check if there is enough buy balance on taker
-
-            taker_balance_in_quote = taker_market.c_get_available_balance(market_pair.taker.quote_asset) * \
-                self._order_size_taker_balance_factor
-
             user_order = self.c_get_adjusted_limit_order_size(market_pair)
 
             try:
@@ -1648,9 +1659,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 assert user_order == s_decimal_zero
                 return s_decimal_zero
 
-
             taker_slippage_adjustment_factor = Decimal("1") + self._slippage_buffer
-            taker_balance = ((taker_balance_in_quote / (self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability))) * quote_rate)
+            taker_balance = (((taker_market.c_get_available_balance(market_pair.taker.quote_asset) * \
+                self._order_size_taker_balance_factor) / (self.c_calculate_effective_hedging_price(market_pair, False, user_order))) * quote_rate)
             order_amount = min(taker_balance, user_order)
             quantized_size_limit = maker_market.c_quantize_order_amount(market_pair.maker.trading_pair, order_amount)
 
@@ -1659,12 +1670,13 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                 self.log_with_clock(
                     logging.INFO,
                     f"({market_pair.maker.trading_pair}) Order size limit ({quantized_size_limit}) "
-                    f"is now less than the current active order amount ({active_order.quantity:.8g}). "
-                    f"Going to adjust the order. Taker_balance calculation {taker_balance}, taker balance in quote: {taker_balance_in_quote}, user order: {user_order}, effective hedging price {(self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability))} ."
+                    f"is now less than the current active order amount ({active_order.quantity:.10g}). "
+                    f"Going to adjust the order. Taker_balance calculation {taker_balance}, taker balance in quote: {(taker_market.c_get_available_balance(market_pair.taker.quote_asset) * self._order_size_taker_balance_factor)}, Order size taker balance factor{self._order_size_taker_balance_factor} user order: {user_order}, effective hedging price {(self.c_calculate_effective_hedging_price(market_pair, False, user_order) * (1 + self._min_profitability))} ."
                 )
             self.c_cancel_order(market_pair, active_order.client_order_id)
             return False
-        return True
+        else:
+            return True
 
     def market_conversion_rate(self) -> Decimal:
         """
@@ -1708,9 +1720,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                 f"({market_pair.maker.trading_pair}) Creating limit bid order for "
                                 f"{bid_size} {market_pair.maker.base_asset} at "
                                 f"{bid_price} {market_pair.maker.quote_asset}. "
-                                f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
-                                f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                                f"(Min_profitability is: {(self._min_profitability)*100:.8f} actual is: {(((effective_hedging_price - bid_price)/bid_price) * 100)} (Taker - Maker / Taker))."
+                                f"Current hedging price: {effective_hedging_price:.10f} {market_pair.maker.quote_asset} "
+                                f"(Rate adjusted: {effective_hedging_price_adjusted:.10f} {market_pair.taker.quote_asset})."
+                                f"(Min_profitability is: {(self._min_profitability)*100:.10f} actual is: {(((effective_hedging_price - bid_price)/bid_price) * 100)} (Taker - Maker / Taker))."
                             )
                         order_id = self.c_place_order(market_pair, True, market_pair.maker, True, bid_size, bid_price)
                     else:
@@ -1748,9 +1760,9 @@ cdef class CrossExchangeMarketMakingStrategy(StrategyBase):
                                 f"({market_pair.maker.trading_pair}) Creating limit ask order for "
                                 f"{ask_size} {market_pair.maker.base_asset} at "
                                 f"{ask_price} {market_pair.maker.quote_asset}. "
-                                f"Current hedging price: {effective_hedging_price:.8f} {market_pair.maker.quote_asset} "
-                                f"(Rate adjusted: {effective_hedging_price_adjusted:.8f} {market_pair.taker.quote_asset})."
-                                f"(Min_profitability is: {(self._min_profitability)*100:.8f} actual is: {(((ask_price - effective_hedging_price)/ask_price) * 100)} (Maker - Taker / Taker))."
+                                f"Current hedging price: {effective_hedging_price:.10f} {market_pair.maker.quote_asset} "
+                                f"(Rate adjusted: {effective_hedging_price_adjusted:.10f} {market_pair.taker.quote_asset})."
+                                f"(Min_profitability is: {(self._min_profitability)*100:.10f} actual is: {(((ask_price - effective_hedging_price)/ask_price) * 100)} (Maker - Taker / Taker))."
                             )
                         order_id = self.c_place_order(market_pair, False, market_pair.maker, True, ask_size, ask_price)
                     else:
